@@ -1,0 +1,74 @@
+--- a/cli/autodetect.cc	2026-06-20 18:11:43.000000000 +0300
++++ b/cli/autodetect.cc	2026-10-28 20:28:39.198720593 +0200
+@@ -3,6 +3,7 @@
+ #include "logger.hh"
+ #include "radioinfo.hh"
+ #include "usbdevice.hh"
++#include "usbserial.hh"
+ 
+ QVariant
+ parseDeviceHandle(const QString &device) {
+@@ -44,6 +45,21 @@
+   if (interfaces.isEmpty())
+     interfaces = USBDeviceDescriptor::detect(false);
+ 
++  // stentor: explicit --radio + --device (serial path) bypasses USB enumeration (pty bridge support)
++  if (parser.isSet("device") && parser.isSet("radio") && parser.value("device").startsWith("/dev/")) {
++    RadioInfo radio = RadioInfo::byKey(parser.value("radio").toLower());
++    if (! radio.isValid()) {
++      errMsg(err) << "Unknown radio '" << parser.value("radio").toLower() << "'.";
++      return nullptr;
++    }
++    USBSerial::Descriptor device(0x28e9, 0x018a, parser.value("device"), false);
++    logInfo() << "Using explicit serial device " << parser.value("device") << " for radio " << radio.name() << ".";
++    Radio *rad = Radio::detect(device, radio, err);
++    if (nullptr == rad)
++      logError() << "Cannot detect radio on explicit device.";
++    return rad;
++  }
++
+   if (interfaces.isEmpty()) {
+     errMsg(err) << "No matching USB devices are found. Check connection?";
+     return nullptr;
+--- a/lib/anytone_interface.cc	2026-06-20 18:11:43.000000000 +0300
++++ b/lib/anytone_interface.cc	2026-10-28 21:52:39.514083846 +0200
+@@ -343,7 +343,8 @@
+   char *p = resp;
+   int len = rlen;
+   while (len > 0) {
+-    if (! waitForReadyRead(1000)) {
++    // stentor: 4 s instead of 1 s - a bridged (browser/WebSocket) link may retry a corrupt frame in between
++    if (! waitForReadyRead(4000)) {
+       errMsg(err) << "No response from device: Timeout.";
+       close();
+       _state = STATE_ERROR;
+--- a/lib/usbdevice.cc	2026-06-20 18:11:43.000000000 +0300
++++ b/lib/usbdevice.cc	2026-10-28 20:39:46.911760107 +0200
+@@ -253,6 +253,11 @@
+ 
+ bool
+ USBDeviceDescriptor::validSerial() const {
++  // stentor: an explicit pseudo-terminal (pty bridge) is always considered valid
++  if (_device.toString().startsWith("/dev/pts/") || _device.toString().startsWith("/dev/dmrbridge")) {
++    logDebug() << "Serial device " << _device.toString() << " is a bridged pty, skipping USB validation.";
++    return true;
++  }
+   QSerialPortInfo info(_device.toString());
+ 
+   logDebug() << "Check if serial port " << _device.toString() << " still exisist and has VID:PID "
+--- a/lib/usbserial.cc	2026-06-20 18:11:43.000000000 +0300
++++ b/lib/usbserial.cc	2026-10-28 20:40:00.793677661 +0200
+@@ -26,7 +26,12 @@
+ 
+   logDebug() << "Try to open " << descriptor.description() << ".";
+   QSerialPortInfo port(descriptor.device().toString());
+-  this->setPort(port);
++  if (descriptor.device().toString().startsWith("/dev/pts/") || descriptor.device().toString().startsWith("/dev/dmrbridge")) {
++    // stentor: bridged pty - not enumerable, open by path
++    this->setPortName(descriptor.device().toString());
++  } else {
++    this->setPort(port);
++  }
+   if (! setParity(QSerialPort::NoParity)) {
+     logWarn() << "Cannot set parity of the serial port to none.";
+   }

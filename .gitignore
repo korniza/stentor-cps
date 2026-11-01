@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.b64
+*.txz
+*.tgz
+*.log
+*.dfu
+qdmr-src/
+dmrconf-bin/
+data/
+secrets.env
+api_key.txt
+.env

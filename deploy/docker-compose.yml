@@ -1,0 +1,29 @@
+# Stentor - self-hosted, single-operator setup (the "one container per ham" model).
+#   cp deploy/example.env .env   # edit CALLSIGN, DMR_ID, RADIO_MODEL, hotspot, keys
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# Put a reverse proxy with TLS in front of :8000 (the browser bridge needs https/wss) and protect /ui
+# (the container itself only checks the X-Shack header on the UI API).
+services:
+  dmrconf:
+    build: { context: .., dockerfile: Dockerfile.dmrconf }
+    image: stentor-dmrconf:0.15.1-p2
+    command: ["true"]      # build-only stage image
+  stentor:
+    build:
+      context: ..
+      args: { VERSION: "${STENTOR_VERSION:-dev}" }
+    image: stentor:${STENTOR_VERSION:-dev}
+    container_name: stentor
+    depends_on: [dmrconf]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: ${TZ:-Europe/Athens}
+      RADIO_DEVICE: ""            # empty = autodetect on the server's USB; browser bridge needs nothing here
+    ports: ["8000:8000"]
+    volumes:
+      - ./data:/data              # workspace codeplugs, ssh key for the hotspot, caches
+      - ./backups:/backups        # every radio read lands here (point it at your NAS)
+      - /dev:/hostdev:ro          # only needed when the radio is plugged into the server
+      - /run/udev:/run/udev:ro
+    device_cgroup_rules: ["c 166:* rmw", "c 188:* rmw", "c 189:* rmw"]

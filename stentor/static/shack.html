@@ -1,0 +1,1436 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later · Copyright (C) 2026 Zacharias Kornilakis (SY1EKQ) -->
+<html lang="el"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stentor Shack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: instrument strip, three status modules, then the working bench: last heard | codeplug editor with side drawer */
+:root{
+  --paper:#e9eeec; --panel:#f7f9f8; --ink:#14232b; --muted:#5b6b70; --line:#cbd5d2;
+  --accent:#0e6e74; --accent-soft:#d3e8e7; --tx:#c25a12; --ok:#2f7d3e; --warn:#a86b00; --bad:#b3261e;
+  --chip:#e0e7e5; --sel:#fff3e6;
+  --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0f171a; --panel:#162227; --ink:#e3ecea; --muted:#93a5a8; --line:#2a3a40;
+  --accent:#4fb8bd; --accent-soft:#17383b; --tx:#f08a43; --ok:#6cc27b; --warn:#e3b04b; --bad:#ff7a6e; --chip:#1f2e33; --sel:#3a2a1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f171a; --panel:#162227; --ink:#e3ecea; --muted:#93a5a8; --line:#2a3a40;
+  --accent:#4fb8bd; --accent-soft:#17383b; --tx:#f08a43; --ok:#6cc27b; --warn:#e3b04b; --bad:#ff7a6e; --chip:#1f2e33; --sel:#3a2a1c; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:.01em}
+.mono,td.num,.freq{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 12px;white-space:nowrap}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:600}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button.tx{background:var(--tx);border-color:var(--tx);color:#fff;font-weight:600}
+button.small{padding:2px 8px;font-size:12px}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=text],input[type=number],textarea{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;max-width:100%}
+input[type=number]{font-family:var(--mono)}
+/* strip */
+.strip{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;border-bottom:2px solid var(--ink);padding-bottom:12px}
+.call{font-family:var(--display);font-weight:700;font-size:clamp(30px,6vw,44px);line-height:1;letter-spacing:.04em}
+.call small{display:block;font-family:var(--body);font-size:13px;font-weight:500;letter-spacing:0;color:var(--muted);margin-top:6px}
+.strip-right{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;background:var(--chip);white-space:nowrap}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.idle{color:var(--muted)}
+/* modules */
+.modules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.module,.pane{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.module header,.pane header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.module h2,.pane h2{font-size:17px}
+.fresh{font-size:11px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.freqpair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.freqbox{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--paper)}
+.freqbox .freq{font-size:18px;font-weight:600}
+.freqbox .freq.tx{color:var(--tx)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--chip);border-radius:6px;padding:2px 8px;font-size:12px;font-family:var(--mono)}
+.chip b{font-family:var(--body);font-weight:600}
+.note{font-size:12.5px;color:var(--muted)}
+.err{border-left:3px solid var(--bad);padding:6px 10px;background:var(--chip);border-radius:4px;font-size:13px}
+.okbox{border-left:3px solid var(--ok);padding:6px 10px;background:var(--chip);border-radius:4px;font-size:13px}
+.syncstate{font-family:var(--display);font-size:20px;font-weight:600}
+.syncstate.ok{color:var(--ok)} .syncstate.warn{color:var(--warn)}
+.confirm{border:1px dashed var(--tx);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row.end{justify-content:flex-end}
+.grow{flex:1 1 auto}
+.diffl{margin:0;padding-left:18px;font-size:13px}
+.diffl li{overflow-wrap:anywhere}
+pre.diff{font-family:var(--mono);font-size:11.5px;line-height:1.35;max-height:320px;overflow:auto;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px;margin:0;white-space:pre}
+pre.diff .add{color:var(--ok)} pre.diff .del{color:var(--bad)} pre.diff .hunk{color:var(--muted)}
+/* bench */
+.bench{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.pane.compact{padding:8px 16px;gap:6px}
+.pane.compact h2{font-size:14px}
+.pane.compact table{font-size:12px}
+.pane.compact td,.pane.compact th{padding:3px 8px}
+.tablewrap{overflow-x:auto}
+.fm-name{width:13em;max-width:100%;padding:3px 6px}
+.area{white-space:nowrap}
+td.nm{white-space:nowrap}
+img.logo{height:18px;width:auto;max-width:48px;vertical-align:middle;margin-right:6px;border-radius:3px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr.rowbtn{cursor:pointer}
+tbody tr.rowbtn:hover td{background:var(--accent-soft)}
+tbody tr.selected td{background:var(--sel)}
+td.call{font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:0}
+td.acts{white-space:nowrap;text-align:right}
+.src{font-size:11px;font-weight:600;border-radius:4px;padding:1px 6px;background:var(--chip)}
+.live{font-size:11px;font-weight:600;white-space:nowrap}
+.live.ok{color:var(--ok)}.live.mid{color:var(--warn)}.live.old,.live.none{color:var(--muted)}
+.live::before{content:"●";margin-right:3px}.live.none::before{content:"○"}
+.src.rf{color:var(--tx)} .src.net{color:var(--accent)}
+.ts{display:inline-block;min-width:30px;text-align:center;font-size:11px;font-weight:600;border-radius:4px;padding:1px 4px;background:var(--accent-soft);color:var(--accent)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;padding:6px 10px;font-weight:600;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.cpgrid{display:grid;grid-template-columns:minmax(160px,230px) minmax(0,1fr);gap:12px}
+@media (max-width:620px){.cpgrid{grid-template-columns:minmax(0,1fr)}}
+.fmgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.fmgrid{grid-template-columns:minmax(0,1fr)}}
+.zones{display:flex;flex-direction:column;gap:4px;max-height:520px;overflow:auto}
+.zones button{text-align:left;display:flex;justify-content:space-between;gap:8px;border-radius:6px}
+.zones button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.zones .n{font-family:var(--mono);color:var(--muted);font-size:12px}
+.managed{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--accent)}
+.empty{color:var(--muted);font-size:13px;padding:10px 0}
+.skel{color:var(--muted)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+img.flag{height:18px;width:auto;border-radius:2px;box-shadow:0 0 0 1px var(--line);vertical-align:-3px;margin-left:4px}
+#brand-flag img.flag{height:22px;vertical-align:-4px;margin-left:8px}
+td.call img.flag{height:13px;margin:0 5px 0 0;vertical-align:-2px}
+.lang{font-weight:700;letter-spacing:.04em;padding:3px 8px}
+.toolbar .sep{width:1px;height:22px;background:var(--line)}
+/* drawer */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.18);padding:16px max(16px,env(safe-area-inset-right,0px)) 24px 16px;overflow:auto;z-index:20;display:flex;flex-direction:column;gap:12px;
+  padding-top:calc(16px + env(safe-area-inset-top,0px))}
+.drawer h3{font-size:16px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.form label.full{grid-column:1/-1}
+.form input,.form select{width:100%}
+.form .check{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:19}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:8px;font-size:13px;z-index:30;max-width:90vw}
+.list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px}
+.list label{display:flex;gap:6px;align-items:center;font-size:13px}
+.progress{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+.progress i{display:block;height:100%;width:40%;background:var(--accent);animation:slide 1.4s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+@media (prefers-reduced-motion:reduce){.progress i{animation:none;width:100%}}
+@media (prefers-reduced-motion:no-preference){.pulse{animation:pulse 1.6s ease-in-out infinite}@keyframes pulse{50%{opacity:.45}}}
+</style>
+<script>/* theme before first paint (no flash); default dark, light only if explicitly chosen */
+try{var t=localStorage.getItem("stentor.theme");}catch(e){}document.documentElement.dataset.theme=(t==="light"?"light":"dark");</script>
+</head><body>
+<div class="wrap">
+  <div class="strip">
+    <div class="call" id="brand">Stentor<span id="brand-flag" class="flag"></span><small id="brand-sub">web CPS · DMR</small></div>
+    <div class="strip-right">
+      <span class="pill idle" id="pill-radio">Ασύρματος …</span>
+      <span class="pill idle" id="pill-hs">Hotspot …</span>
+      <span class="pill idle" id="pill-bm">BrandMeister …</span>
+      <span class="pill idle" id="pill-sync">Sync …</span>
+      <button class="small" id="btn-theme" title="Theme / Θέμα" aria-label="Theme">☀</button>
+      <button class="small lang" id="btn-lang" title="Language / Γλώσσα">EN</button>
+    </div>
+  </div>
+  <div class="err" id="page-err" hidden></div>
+
+  <div class="modules">
+    <section class="module"><header><h2>Hotspot</h2><span class="fresh" id="f-hs"></span></header><div id="hs-body"><div class="skel pulse">Διαβάζω το WPSD…</div></div></section>
+    <section class="module"><header><h2>BrandMeister</h2><span class="fresh" id="f-bm"></span></header><div id="bm-body"><div class="skel pulse">Ρωτάω το BrandMeister…</div></div></section>
+    <section class="module"><header><h2>WPSD → Anytone</h2><span class="fresh" id="f-sync"></span></header><div id="sync-body"><div class="skel pulse">Συγκρίνω…</div></div></section>
+  </div>
+
+  <div class="bench">
+    <section class="pane compact" id="lh-pane">
+      <header><h2>Last heard</h2><div class="row"><label class="note"><input type="checkbox" id="rf-only"> Μόνο από τον ασύρματο (RF)</label><label class="note"><input type="checkbox" id="lh-live"> Live</label><button class="small" id="lh-more">Περισσότερα</button><span class="fresh" id="f-lh"></span></div></header>
+      <div class="tablewrap" id="lh-body"><div class="skel pulse">Φορτώνω…</div></div>
+    </section>
+
+    <section class="pane" id="cp-pane">
+      <header>
+        <h2>Codeplug</h2>
+        <div class="toolbar">
+          <select id="cp-select" title="Αρχείο codeplug"><option>…</option></select>
+          <span class="sep"></span>
+          <button id="btn-read" title="Διαβάζει τον ασύρματο και αποθηκεύει backup στο NAS">⟵ Read</button>
+          <button id="btn-write" class="tx" title="Γράφει το επιλεγμένο αρχείο στον ασύρματο (με προεπισκόπηση)">Write ⟶</button>
+          <button id="btn-contacts" title="Γράφει τη λίστα Digital Contacts (RadioID) στον ασύρματο">☎ Digital Contacts</button>
+          <button id="btn-validate" title="Έλεγχος εγκυρότητας με dmrconf">Έλεγχος</button>
+          <button id="btn-revert" title="Επαναφορά του current από το τελευταίο read">Επαναφορά</button>
+          <span class="sep"></span>
+          <button id="btn-export-cps" title="Κατεβάζει το codeplug ως CSV για εισαγωγή στο AnyTone CPS (zip)">⇩ CPS CSV</button>
+          <button id="btn-import-rdt" title="Ανεβάζει ένα .rdt του AnyTone CPS και το μετατρέπει σε codeplug">⇧ .rdt</button>
+          <input type="file" id="rdt-file" accept=".rdt" hidden>
+          <span class="sep"></span>
+          <button id="btn-bridge" title="Σύνδεσε τον ασύρματο στη USB αυτού του υπολογιστή και προγραμμάτισέ τον μέσα από τον browser (Chrome/Edge)">⚡ Σύνδεση</button>
+        </div>
+      </header>
+      <div class="note" id="cp-meta"></div>
+      <div id="radio-op" hidden></div>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="zones" aria-selected="true">Zones</button>
+        <button role="tab" data-tab="channels">Κανάλια</button>
+        <button role="tab" data-tab="contacts">Επαφές / TG</button>
+        <button role="tab" data-tab="grouplists">RX Group lists</button>
+        <button role="tab" data-tab="scanlists">Scan lists</button>
+        <button role="tab" data-tab="fm">FM Radio</button>
+        <button role="tab" data-tab="rpt">Αναμεταδότες</button>
+        <button role="tab" data-tab="preset">Βιβλιοθήκη</button>
+      </div>
+      <div id="cp-body"><div class="skel pulse">Φορτώνω το codeplug…</div></div>
+    </section>
+  </div>
+</div>
+<div id="drawer-root"></div>
+<div id="toast-root"></div>
+
+<script>
+/* ---------------- i18n + flags ---------------- */
+const LANG = (() => { try { const v = localStorage.getItem("stentor.lang"); if (v) return v; } catch {} return (navigator.language || "").toLowerCase().startsWith("el") ? "el" : "en"; })();
+const LOCALE = LANG === "en" ? "en-GB" : "el-GR";
+const T_EN = {
+"Δεν επιτρέπεται η πρόσβαση. Ξανασυνδέσου.": "Access denied. Sign in again.",
+"Ο server δεν απαντά.": "The server is not responding.",
+"άγνωστο σφάλμα": "unknown error",
+"ενημ. ": "upd. ",
+"Hotspot: υπηρεσία εκτός": "Hotspot: service down",
+"Ασύρματος RX": "Radio RX",
+"Ασύρματος TX": "Radio TX",
+"Λειτουργία": "Mode",
+"Υπηρεσίες": "Services",
+"BrandMeister: σφάλμα": "BrandMeister: error",
+"Κατάσταση": "Status",
+"Τελ. επαφή": "Last seen",
+"Talkgroups στο hotspot": "Talkgroups on the hotspot",
+"Κανένα static ή dynamic.": "No static or dynamic talkgroups.",
+"Sync: χωρίς codeplug": "Sync: no codeplug",
+"Δεν υπάρχει codeplug στο workspace ακόμα.": "There is no codeplug in the workspace yet.",
+"Codeplug σε sync": "Codeplug in sync",
+"Codeplug εκτός sync": "Codeplug out of sync",
+"Λείπει": "Missing",
+"Περισσεύει": "Extra",
+"Σε συμφωνία": "In sync",
+"1 διαφορά": "1 difference",
+" διαφορές": " differences",
+"» στο": "» in",
+"κανάλια σωστά": "channels correct",
+"… και": "… and",
+"ακόμα": "more",
+"Επιπλέον TG": "Extra TGs",
+"π.χ. 2021:2, 9112:1": "e.g. 2021:2, 9112:1",
+"Συγχρονισμός codeplug": "Sync codeplug",
+"Θα ενημερωθεί το αρχείο": "The file",
+": κανάλια «HS …» στη zone «": " will be updated: «HS …» channels in zone «",
+"» από τις συχνότητες και τα TG του WPSD. Ο ασύρματος δεν αλλάζει.": "» from the hotspot's frequencies and talkgroups. The radio is not touched.",
+"Ενημέρωση αρχείου": "Update file",
+"Άκυρο": "Cancel",
+"Ενημερώνω…": "Updating…",
+"Έγινε:": "Done:",
+"νέα,": "new,",
+"ενημερωμένα,": "updated,",
+"αφαιρέθηκαν": "removed",
+" · ΠΡΟΣΟΧΗ: αποτυχία ελέγχου": " · WARNING: validation failed",
+" · έλεγχος OK": " · validation OK",
+"Ήταν ήδη σε συμφωνία.": "Already in sync.",
+"Καμία εκπομπή στα logs.": "No transmissions in the logs.",
+"Ώρα": "Time",
+"Από": "From",
+"Προς": "To",
+"Πηγή": "Source",
+"Διάρκ.": "Dur.",
+"Δεν υπάρχει codeplug ακόμα. Πάτα «Read» με τον ασύρματο συνδεδεμένο στον server.": "No codeplug yet. Press «Read» with the radio connected.",
+"Αρχείο": "File",
+"· τελευταία αλλαγή": "· last change",
+" · ΠΡΟΣΟΧΗ: επεξεργάζεσαι αρχείο που δεν είναι το current": " · NOTE: you are editing a file other than current",
+"Κανάλι": "Channel",
+"Ισχύς": "Power",
+"Χωρίς zone": "No zone",
+"Μετονομασία": "Rename",
+"Διαγραφή": "Delete",
+"κανάλια": "channels",
+"+ Υπάρχον κανάλι": "+ Existing channel",
+"+ Νέο κανάλι": "+ New channel",
+"Πάνω": "Up",
+"Κάτω": "Down",
+"Αφαίρεση από τη zone": "Remove from zone",
+"Η zone είναι άδεια.": "The zone is empty.",
+"Νέα zone": "New zone",
+"Όνομα (έως 16 χαρ.)": "Name (up to 16 chars)",
+"Μετονομασία zone": "Rename zone",
+"Νέο όνομα": "New name",
+"Διαγραφή της zone «": "Delete zone «",
+"»; Τα κανάλια της μένουν στο codeplug.": "»? Its channels stay in the codeplug.",
+"Αναζήτηση: όνομα, συχνότητα, TG": "Search: name, frequency, TG",
+"Εμφανίζονται τα πρώτα 400. Φίλτραρε για περισσότερα.": "Showing the first 400. Filter to see more.",
+"Αναζήτηση επαφής / TG": "Search contact / TG",
+"+ Επαφή / TG": "+ Contact / TG",
+"Όνομα": "Name",
+"Αριθμός": "Number",
+"Τύπος": "Type",
+"Χρήση": "Used by",
+" κανάλια": " channels",
+"Μέλη (TG)": "Members (TG)",
+"Κανάλια": "Channels",
+"Καμία scan list.": "No scan lists.",
+"Επιβεβαίωση": "Confirm",
+"Ναι": "Yes",
+"Προσθήκη καναλιών": "Add channels",
+"Αναζήτηση": "Search",
+"Προσθήκη": "Add",
+"Όνομα (έως 16)": "Name (up to 16)",
+"FM (αναλογικό)": "FM (analogue)",
+"προεπιλογή": "default",
+"TX tone (CTCSS Hz ή Dnnn)": "TX tone (CTCSS Hz or Dnnn)",
+"88.5 ή D023": "88.5 or D023",
+"κενό = χωρίς": "empty = none",
+"Μόνο λήψη (RX only)": "Receive only (RX only)",
+"καμία": "none",
+"Νέο κανάλι": "New channel",
+"Αποθήκευση": "Save",
+"Χρειάζεται όνομα, RX και TX.": "Name, RX and TX are required.",
+"Η αλλαγή τύπου DMR↔FM δεν υποστηρίζεται σε υπάρχον κανάλι. Φτιάξε νέο.": "Changing an existing channel between DMR and FM is not supported. Create a new one.",
+"Αποθηκεύω…": "Saving…",
+"Το κανάλι δημιουργήθηκε.": "Channel created.",
+"Αποθηκεύτηκε.": "Saved.",
+"Διαγραφή του καναλιού «": "Delete channel «",
+"» από το codeplug και από όλες τις zones;": "» from the codeplug and from every zone?",
+"Διαγράφηκε.": "Deleted.",
+"Νέα επαφή / talkgroup": "New contact / talkgroup",
+"Επαφή": "Contact",
+"Ήχος κλήσης (ring)": "Call tone (ring)",
+"Χρειάζεται όνομα και αριθμός.": "Name and number are required.",
+"Διαγραφή της επαφής «": "Delete contact «",
+"»; Θα αφαιρεθεί από κανάλια και group lists.": "»? It will be removed from channels and group lists.",
+"Νέα RX group list": "New RX group list",
+"Μέλη": "Members",
+"Αναζήτηση TG": "Search TG",
+"Χρειάζεται όνομα.": "A name is required.",
+"Διαγραφή της group list «": "Delete group list «",
+"Νέα scan list": "New scan list",
+"Αναζήτηση καναλιού": "Search channel",
+"Διαγραφή της scan list «": "Delete scan list «",
+"Διαβάζω τον ασύρματο…": "Reading the radio…",
+"Μην αποσυνδέσεις τον ασύρματο. Παίρνει 1–3 λεπτά.": "Do not disconnect the radio. Takes 1–3 minutes.",
+"Διαβάστηκε. Backup στο NAS:": "Read complete. Backup on the NAS:",
+". Στο workspace ως": ". In the workspace as",
+"και": "and",
+"Άνοιγμα ως current (αντικατάσταση)": "Open as current (replace)",
+"Κλείσιμο": "Close",
+"Το read απέτυχε:": "Read failed:",
+"Προετοιμασία εγγραφής…": "Preparing the write…",
+"Έλεγχος εγκυρότητας και σύγκριση με το τελευταίο read.": "Validating and comparing with the last read.",
+"Ο έλεγχος απέτυχε: ": "Validation failed: ",
+"Εγγραφή του «": "Write «",
+"» στον ασύρματο": "» to the radio",
+"· έλεγχος dmrconf": "· dmrconf check",
+"ΑΠΕΤΥΧΕ": "FAILED",
+"προσθήκες,": "additions,",
+"αφαιρέσεις σε σχέση με το τελευταίο read": "removals compared with the last read",
+" (το diff είναι κομμένο)": " (diff truncated)",
+"(χωρίς διαφορές)": "(no differences)",
+"Πριν τη γραφή παίρνεται αυτόματα νέο backup από τον ασύρματο. Μην αποσυνδέσεις τον ασύρματο μέχρι το τέλος (1–6 λεπτά).": "A fresh backup is read from the radio before writing. Do not disconnect the radio until it finishes (1–6 minutes).",
+"Γράψε στον ασύρματο": "Write to the radio",
+"Γράφω στον ασύρματο…": "Writing to the radio…",
+"Backup, επανεκκίνηση του ασυρμάτου, και μετά εγγραφή. Μην αγγίξεις τον ασύρματο.": "Backup, radio reboot, then the write. Do not touch the radio.",
+" (ο ασύρματος επανεκκινεί, περιμένω)": " (radio rebooting, waiting)",
+  "Διαφορική εγγραφή:": "Differential write:",
+  "υπήρχαν": "existed",
+  "νέα": "new",
+  "Βιβλιοθήκη": "Library",
+  "Έτοιμες ομάδες καναλιών με διεθνείς συχνότητες. Προστίθενται ως κανάλια FM σε δική τους zone· όσα υπάρχουν ήδη παραλείπονται. Γράφονται στον ασύρματο με Write.": "Ready-made channel sets with international frequencies. Added as FM channels in their own zone; existing ones are skipped. They reach the radio with Write.",
+  "ήδη υπήρχαν": "already existed",
+  "Τελευταία φορά στο BrandMeister": "Last seen on BrandMeister",
+  "Έλεγχος ζωντάνιας (BM)": "Liveness check (BM)",
+  "Ελέγχω…": "Checking…",
+  "Δεν βρέθηκε στο BrandMeister": "Not found on BrandMeister",
+  "Κανένα BM ID για έλεγχο": "No BM IDs to check",
+  "BM last seen: πράσινο = < 2 μήνες, πορτοκαλί = < 1 χρόνος, γκρι = παλιότερα/ποτέ. Προσοχή: ένας DMR+ αναμεταδότης μπορεί να ζει εκεί χωρίς να φαίνεται στο BM.": "BM last seen: green = < 2 months, orange = < 1 year, grey = older/never. Note: a DMR+ repeater may be alive there without showing on BM.",
+  "Αναμεταδότες": "Repeaters",
+  "Χώρα (αγγλικά, π.χ. Greece)": "Country (English, e.g. Greece)",
+  "περιοχή / πόλη (προαιρετικό)": "region / city (optional)",
+  "Διακριτικό": "Callsign",
+  "Πόλη": "City",
+  "υπάρχει ήδη": "already in the codeplug",
+  "Προσθήκη επιλεγμένων στο codeplug": "Add selected to the codeplug",
+  "Δεν βρέθηκαν αναμεταδότες.": "No repeaters found.",
+  "Χώρα και προαιρετικά περιοχή → Αναζήτηση. DMR από το RadioID.net· αναλογικοί (FM) μόλις εγκριθεί το RepeaterBook.": "Country and optionally a region → Search. DMR from RadioID.net; analog (FM) once RepeaterBook access is approved.",
+  "Προσθήκη αναμεταδοτών": "Add repeaters",
+  "Talkgroups (TG:TS, χωρισμένα με κόμμα)": "Talkgroups (TG:TS, comma separated)",
+  "Roaming zone": "Roaming zone",
+  "Και FM κανάλι όπου υπάρχει": "Also an FM channel where available",
+  "αναμεταδότες": "repeaters",
+  "TG": "TG",
+  "κανάλια «<διακριτικό> <TG>», μία zone, μία roaming zone. Τα κανάλια γράφονται στον ασύρματο με Write.": "channels “<callsign> <TG>”, one zone, one roaming zone. They reach the radio with Write.",
+  "Δώσε τουλάχιστον ένα TG": "Enter at least one TG",
+  "κανάλια προστέθηκαν": "channels added",
+  "Περισσότερα": "More",
+  "Λιγότερα": "Fewer",
+  "Επιλογή όλων": "Select all",
+  "Περιοχή": "Area",
+  "Διαγραφή επιλεγμένων": "Delete selected",
+  "επιλεγμένα": "selected",
+  "μνημών FM από τη λίστα;": "FM memories from the list?",
+  "καναλιών από το codeplug και από όλες τις zones;": "channels from the codeplug and from all zones?",
+  "επαφών; Θα αφαιρεθούν από κανάλια και group lists.": "contacts? They are removed from channels and group lists.",
+  "Διαγράφηκαν.": "Deleted.",
+  "μνήμες": "memories",
+  "Επαναφορά του «current»": "Restore “current”",
+  "Από το τελευταίο read (ό,τι έχει τώρα ο ασύρματος)": "From the last read (what the radio holds now)",
+  "Από backup στο NAS:": "From a NAS backup:",
+  "(κανένα backup)": "(no backups)",
+  "Χάνονται οι αλλαγές του editor στο current. Ο ασύρματος δεν αλλάζει μέχρι να πατήσεις Write.": "Editor changes in current are lost. The radio does not change until you press Write.",
+  "στον ασύρματο:": "on the radio:",
+  "δεν έχει γραφτεί": "not written yet",
+  "Σύνδεσε πρώτα τον ασύρματο (USB στον server ή «⚡ Σύνδεση»)": "Connect the radio first (USB on the server or “⚡ Connect”)",
+  "σταθμοί κόπηκαν (όριο 100)": "stations dropped (limit 100)",
+  "Μνήμες FM του": "FM memories of",
+  "Διαβάζει τις μνήμες FM που έχει τώρα ο ασύρματος (σύντομη σύνδεση, μετά επανεκκινεί)": "Reads the FM memories currently in the radio (short session, then it reboots)",
+  "Από ασύρματο": "From radio",
+  "Γράφει μόνο τις μνήμες FM (δευτερόλεπτα). Το κανονικό Write τις περιλαμβάνει επίσης.": "Writes only the FM memories (seconds). The normal Write includes them too.",
+  "Γράψε FM": "Write FM",
+  "Καθάρισμα": "Clear",
+  "Σταθμός": "Station",
+  "Αφαίρεση": "Remove",
+  "Καμία μνήμη FM. Διάλεξε σταθμούς δεξιά ή πρόσθεσε χειροκίνητα.": "No FM memories. Pick stations on the right or add one by hand.",
+  "Όνομα (προαιρετικό)": "Name (optional)",
+  "Σταθμοί ανά περιοχή": "Stations by area",
+  "Κωδικός χώρας ISO (gr, cy, de…)": "ISO country code (gr, cy, de…)",
+  "— πόλη —": "— city —",
+  "(φόρτωσε χώρα)": "(load a country)",
+  "Φόρτωση": "Load",
+  "Προσθήκη επιλεγμένων": "Add selected",
+  "Όλοι": "All",
+  "Πηγή:": "Source:",
+  "Πομπός": "Transmitter",
+  "Διάλεξε χώρα και πόλη και πάτα «Φόρτωση». Οι λίστες προέρχονται από το radiomap.eu.": "Pick a country and a city and press “Load”. Lists come from radiomap.eu.",
+  "Δώσε συχνότητα 64–108 MHz": "Enter a frequency between 64 and 108 MHz",
+  "Να αδειάσει η λίστα FM του codeplug;": "Empty the codeplug's FM list?",
+  "Διάλεξε πόλη": "Pick a city",
+  "Διαβάζω τις μνήμες FM…": "Reading the FM memories…",
+  "Ο ασύρματος έχει": "The radio holds",
+  "μνήμες FM": "FM memories",
+  "Χρήση ως λίστα του codeplug": "Use as the codeplug's list",
+  "Εγγραφή": "Write",
+  "μνημών FM στον ασύρματο": "FM memories to the radio",
+  "αντικαθιστά όλες τις μνήμες FM του ασυρμάτου. Διαρκεί δευτερόλεπτα· μετά ο ασύρματος επανεκκινεί.": "replaces all FM memories in the radio. Takes seconds; the radio reboots afterwards.",
+  "Οι μνήμες FM γράφτηκαν": "FM memories written",
+  "blocks γράφτηκαν,": "blocks written,",
+  "ίδια παραλείφθηκαν": "identical skipped",
+"Η εγγραφή ολοκληρώθηκε. Backup πριν τη γραφή:": "Write complete. Backup taken before writing:",
+". Ο ασύρματος θα κάνει επανεκκίνηση.": ". The radio will reboot.",
+"Η εγγραφή απέτυχε:": "Write failed:",
+"Δεν γράφτηκε τίποτα στον ασύρματο.": "Nothing was written to the radio.",
+"Ο ασύρματος μπορεί να έχει μισή εγγραφή: ξαναγράψε ή επανέφερε από το backup.": "The radio may hold a partial write: write again or restore from the backup.",
+"Έλεγχος…": "Checking…",
+"Έγκυρο για τον ασύρματο": "Valid for the radio",
+"Μη έγκυρο": "Invalid",
+"χωρίς προειδοποιήσεις": "no warnings",
+"Ασύρματος: μέσω browser": "Radio: via browser",
+"Ασύρματος στον server": "Radio on the server",
+"Ασύρματος: μη συνδεδεμένος": "Radio: not connected",
+"Ασύρματος: άγνωστο": "Radio: unknown",
+"κλείσιμο από τον χρήστη": "closed by the user",
+"Ο browser δεν υποστηρίζει Web Serial. Χρειάζεται Chrome ή Edge σε υπολογιστή (όχι Firefox/Safari/κινητό).": "This browser has no Web Serial. Use Chrome or Edge on a computer (not Firefox/Safari/mobile).",
+"Ο ασύρματος επανεκκινεί — περιμένω να επανέλθει…": "The radio is rebooting — waiting for it to come back…",
+"Ο ασύρματος επανήλθε — γέφυρα ενεργή ξανά.": "The radio is back — bridge active again.",
+"Ο ασύρματος δεν επανήλθε· πάτα ξανά «⚡ Σύνδεση».": "The radio did not come back; press «⚡ Connect» again.",
+"WebSocket κλειστό ": "WebSocket closed ",
+"σφάλμα εγγραφής στη θύρα": "error writing to the port",
+"ο server έκλεισε τη σύνδεση": "the server closed the connection",
+"ο ασύρματος αποσυνδέθηκε": "the radio was disconnected",
+"⎘ Αποσύνδεση ασυρμάτου": "⎘ Disconnect radio",
+"Ο ασύρματος είναι συνδεδεμένος μέσα από αυτόν τον browser. Τα Read/Write περνούν τώρα από εδώ. Μετά από κάθε read/write ο ασύρματος κάνει επανεκκίνηση και η γέφυρα ξανασυνδέεται μόνη της. Μην κλείσεις την καρτέλα όσο γίνεται read ή write.": "The radio is connected through this browser. Read/Write now go through here. After every read/write the radio reboots and the bridge reconnects by itself. Do not close this tab during a read or write.",
+"Δεν άνοιξε η θύρα:": "Could not open the port:",
+". Αν η θύρα είναι ανοιχτή στο CPS, κλείσ' το πρώτα.": ". If the port is open in the CPS, close it first.",
+"Ασύρματος: επανεκκίνηση…": "Radio: rebooting…",
+"⚡ Σύνδεση": "⚡ Connect",
+"⚡ Αποσύνδεση": "⚡ Disconnect",
+"Γέφυρα ασυρμάτου: ": "Radio bridge: ",
+"Δεν βλέπω ασύρματο στον server. Αν είναι συνδεδεμένος σε αυτόν τον υπολογιστή, πάτα πρώτα «⚡ Σύνδεση».": "No radio seen on the server. If it is plugged into this computer, press «⚡ Connect» first.",
+"Επαναφορά του «current» από το τελευταίο read; Χάνονται οι αλλαγές του editor.": "Restore «current» from the last read? Editor changes will be lost.",
+"Επαναφέρθηκε.": "Restored.",
+"Ασύρματος …": "Radio …",
+"Διαβάζω το WPSD…": "Reading the hotspot…",
+"Ρωτάω το BrandMeister…": "Asking BrandMeister…",
+"Συγκρίνω…": "Comparing…",
+"Μόνο από τον ασύρματο (RF)": "Radio (RF) only",
+"Φορτώνω…": "Loading…",
+"Έλεγχος": "Validate",
+"Επαναφορά": "Revert",
+"Επαφές / TG": "Contacts / TG",
+"Φορτώνω το codeplug…": "Loading the codeplug…",
+"Αρχείο codeplug": "Codeplug file",
+"Διαβάζει τον ασύρματο και αποθηκεύει backup στο NAS": "Reads the radio and stores a backup on the NAS",
+"Γράφει το επιλεγμένο αρχείο στον ασύρματο (με προεπισκόπηση)": "Writes the selected file to the radio (with preview)",
+"Έλεγχος εγκυρότητας με dmrconf": "Validate with dmrconf",
+"Επαναφορά του current από το τελευταίο read": "Restore current from the last read",
+"Κατεβάζει το codeplug ως CSV για εισαγωγή στο AnyTone CPS (zip)": "Download the codeplug as CSV for the AnyTone CPS import (zip)",
+"Ανεβάζει ένα .rdt του AnyTone CPS και το μετατρέπει σε codeplug": "Upload an AnyTone CPS .rdt and convert it into a codeplug",
+"Μετατρέπω το .rdt…": "Converting the .rdt…",
+"Εισαγωγή OK: ": "Imported: ",
+"Η εισαγωγή απέτυχε: ": "Import failed: ",
+"Σύνδεσε τον ασύρματο στη USB αυτού του υπολογιστή και προγραμμάτισέ τον μέσα από τον browser (Chrome/Edge)": "Plug the radio into this computer's USB and program it through the browser (Chrome/Edge)",
+"Zones": "Zones",
+"Σύγκριση": "Comparison",
+"Hotspot": "Hotspot",
+"Last heard": "Last heard",
+"Codeplug": "Codeplug",
+"Γράφει τη λίστα Digital Contacts (RadioID) στον ασύρματο": "Writes the Digital Contacts list (RadioID) to the radio",
+"Digital Contacts (RadioID) στον ασύρματο": "Digital Contacts (RadioID) to the radio",
+"Λίστα χρηστών DMR για να δείχνει ο ασύρματος διακριτικό/όνομα/πόλη του καλούντος. Αντικαθιστά τη λίστα που έχει ο ασύρματος.": "DMR user list so the radio shows the caller's callsign/name/city. Replaces the list currently in the radio.",
+"Χώρες": "Countries",
+"όλος ο κόσμος (~315k, αργό)": "whole world (~315k, slow)",
+"Υπολογισμός": "Calculate",
+"Υπολογίζω…": "Calculating…",
+"εγγραφές": "entries",
+"Ο ασύρματος πρέπει να μείνει συνδεδεμένος· παίρνει 1–5 λεπτά και μετά κάνει επανεκκίνηση.": "Keep the radio connected; takes 1–5 minutes, then the radio reboots.",
+"Γράφω τα Digital Contacts…": "Writing the Digital Contacts…",
+"Τα Digital Contacts γράφτηκαν.": "Digital Contacts written.",
+"Ο ασύρματος θα κάνει επανεκκίνηση.": "The radio will reboot.",
+"Η εγγραφή των contacts απέτυχε:": "Writing the contacts failed:"
+};
+function t(s){ if (LANG === "el") return s; const v = T_EN[s]; if (v !== undefined) return v; const k = s.trim(); return T_EN[k] !== undefined ? s.replace(k, T_EN[k]) : s; }
+function i18nDom(){
+  if (LANG === "el") return;
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = []; while (w.nextNode()) nodes.push(w.currentNode);
+  for (const n of nodes) { const k = n.nodeValue.trim(); if (k && T_EN[k] !== undefined) n.nodeValue = n.nodeValue.replace(k, T_EN[k]); }
+  for (const el of document.querySelectorAll("[title],[placeholder]")) for (const a of ["title", "placeholder"]) { const v = el.getAttribute(a); if (v && T_EN[v] !== undefined) el.setAttribute(a, T_EN[v]); }
+  document.documentElement.lang = "en";
+}
+// ITU amateur prefix blocks -> ISO 3166 (two-character prefix ranges; first match wins)
+const PREFIXES = [["SV","SZ","GR"],["J4","J4","GR"],["5B","5B","CY"],["C4","C4","CY"],["H2","H2","CY"],["P3","P3","CY"],["TA","TC","TR"],["YM","YM","TR"],["IA","IZ","IT"],["I0","I9","IT"],["F0","F9","FR"],["FA","FZ","FR"],["TM","TM","FR"],["TK","TK","FR"],["DA","DR","DE"],["EA","EH","ES"],["AM","AO","ES"],["CT","CU","PT"],["G0","G9","GB"],["GA","GZ","GB"],["M0","M9","GB"],["MA","MZ","GB"],["2A","2Z","GB"],["EI","EJ","IE"],["ON","OT","BE"],["PA","PI","NL"],["LX","LX","LU"],["HB","HB","CH"],["HE","HE","CH"],["OE","OE","AT"],["OK","OL","CZ"],["OM","OM","SK"],["SP","SR","PL"],["HA","HA","HU"],["HG","HG","HU"],["YO","YR","RO"],["LZ","LZ","BG"],["YT","YU","RS"],["9A","9A","HR"],["S5","S5","SI"],["E7","E7","BA"],["Z3","Z3","MK"],["4O","4O","ME"],["ZA","ZA","AL"],["SA","SM","SE"],["7S","7S","SE"],["8S","8S","SE"],["LA","LN","NO"],["OZ","OZ","DK"],["5P","5Q","DK"],["OH","OJ","FI"],["ES","ES","EE"],["YL","YL","LV"],["LY","LY","LT"],["UA","UI","RU"],["R0","R9","RU"],["RA","RZ","RU"],["UR","UZ","UA"],["EM","EO","UA"],["EU","EW","BY"],["ER","ER","MD"],["4L","4L","GE"],["EK","EK","AM"],["4J","4K","AZ"],["4X","4Z","IL"],["TF","TF","IS"],["9H","9H","MT"],["T7","T7","SM"],["HV","HV","VA"],["3A","3A","MC"],["C3","C3","AD"],["ZB","ZB","GI"],["GJ","GJ","JE"],["GU","GU","GG"],["GD","GD","IM"],["OY","OY","FO"],["OX","OX","GL"],["JW","JX","NO"],["K0","K9","US"],["KA","KZ","US"],["N0","N9","US"],["NA","NZ","US"],["W0","W9","US"],["WA","WZ","US"],["AA","AL","US"],["VA","VG","CA"],["VE","VE","CA"],["VO","VO","CA"],["VY","VY","CA"],["XE","XI","MX"],["4A","4C","MX"],["LU","LW","AR"],["LO","LT","AR"],["AY","AZ","AR"],["PP","PY","BR"],["ZV","ZZ","BR"],["CE","CE","CL"],["XQ","XR","CL"],["HK","HK","CO"],["OA","OC","PE"],["YV","YY","VE"],["HC","HD","EC"],["CX","CX","UY"],["ZP","ZP","PY"],["CP","CP","BO"],["TI","TI","CR"],["HP","HP","PA"],["CM","CO","CU"],["HI","HI","DO"],["KP","KP","PR"],["VK","VK","AU"],["AX","AX","AU"],["ZL","ZM","NZ"],["JA","JS","JP"],["7J","7N","JP"],["8J","8N","JP"],["HL","HL","KR"],["DS","DT","KR"],["6K","6N","KR"],["BA","BZ","CN"],["BV","BX","TW"],["VR","VR","HK"],["VU","VW","IN"],["AT","AW","IN"],["HS","HS","TH"],["E2","E2","TH"],["9M","9M","MY"],["9V","9V","SG"],["YB","YH","ID"],["DU","DZ","PH"],["4F","4I","PH"],["XV","XV","VN"],["3W","3W","VN"],["9N","9N","NP"],["AP","AS","PK"],["EP","EQ","IR"],["YI","YI","IQ"],["HZ","HZ","SA"],["7Z","7Z","SA"],["A4","A4","OM"],["A6","A6","AE"],["A7","A7","QA"],["A9","A9","BH"],["9K","9K","KW"],["JY","JY","JO"],["OD","OD","LB"],["YK","YK","SY"],["SU","SU","EG"],["CN","CN","MA"],["7X","7X","DZ"],["3V","3V","TN"],["5A","5A","LY"],["ZS","ZU","ZA"],["5Z","5Z","KE"],["5H","5I","TZ"],["5N","5O","NG"],["9J","9J","ZM"],["Z2","Z2","ZW"],["7Q","7Q","MW"],["ET","ET","ET"],["6W","6W","SN"],["EL","EL","LR"],["9G","9G","GH"],["TU","TU","CI"],["3B","3B","MU"],["FR","FR","RE"],["5R","5S","MG"],["C9","C9","MZ"],["D2","D3","AO"],["V5","V5","NA"],["A2","A2","BW"],["ST","ST","SD"],["UN","UQ","KZ"],["UK","UM","UZ"],["EX","EX","KG"],["EY","EY","TJ"],["EZ","EZ","TM"],["JT","JV","MN"]];
+function isoFor(call){
+  if (!call || typeof call !== "string") return null;
+  const c = call.toUpperCase().split("/").sort((a, b) => b.length - a.length)[0];
+  if (!/^[A-Z0-9]{3,}$/.test(c) || !/[A-Z]/.test(c) || !/[0-9]/.test(c)) return null;
+  const p2 = c.slice(0, 2);
+  for (const [lo, hi, iso] of PREFIXES) if (p2 >= lo && p2 <= hi) return iso;
+  return null;
+}
+function flag(call){ const iso = isoFor(call); return iso ? `<img class="flag" src="flag/${iso.toLowerCase()}" alt="${iso}" title="${iso}" loading="lazy" onerror="this.replaceWith(document.createTextNode(this.alt + ' '))">` : ""; }
+
+/* ---------------- api ---------------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtF = (v) => { const n = parseFloat(v); return isFinite(n) ? n.toFixed(4) : "—"; };
+const numF = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+async function api(tool, input){
+  let r;
+  try { r = await fetch("api/tool/" + tool, { method: "POST", headers: { "Content-Type": "application/json", "X-Shack": "1" }, body: JSON.stringify(input || {}) }); }
+  catch (e) { throw { code: "server_unavailable", message: String(e) }; }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw { code: r.status === 401 || r.status === 403 ? "needs_reauth" : "tool_error", message: j.error || ("HTTP " + r.status) };
+  return j;
+}
+async function job(tool, input, onTick){
+  const r = await fetch("api/job/" + tool, { method: "POST", headers: { "Content-Type": "application/json", "X-Shack": "1" }, body: JSON.stringify(input || {}) });
+  const j = await r.json();
+  if (!r.ok) throw { code: "tool_error", message: j.error || ("HTTP " + r.status) };
+  for (;;) {
+    await new Promise(res => setTimeout(res, 2000));
+    const s = await (await fetch("api/job/" + j.job, { headers: { "X-Shack": "1" } })).json();
+    onTick && onTick(s);
+    if (s.state === "done") return s.result;
+    if (s.state === "error") throw { code: "tool_error", message: s.error };
+    if (s.error) throw { code: "tool_error", message: s.error + " (ο server επανεκκίνησε;)" };
+  }
+}
+function errCopy(e){
+  switch (e && e.code) {
+    case "needs_reauth": return t("Δεν επιτρέπεται η πρόσβαση. Ξανασυνδέσου.");
+    case "server_unavailable": return t("Ο server δεν απαντά.");
+    default: return (e && (e.message || e.code)) || t("άγνωστο σφάλμα");
+  }
+}
+function toast(msg, ms = 3500){
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+  $("toast-root").replaceChildren(t); setTimeout(() => t.remove(), ms);
+}
+function stamp(id){ $(id).textContent = t("ενημ. ") + new Date().toLocaleTimeString(LOCALE, {hour:"2-digit", minute:"2-digit", second:"2-digit"}); }
+function setPill(id, cls, text){ const el = $(id); el.className = "pill " + cls; el.textContent = text; }
+const timers = {};
+function poll(key, tool, input, onData, bodyId, freshId, interval){
+  clearInterval(timers[key]);
+  const run = async () => {
+    try { const p = await api(tool, typeof input === "function" ? input() : input); $(bodyId).dataset.loaded = "1"; freshId && stamp(freshId); onData(p); }
+    catch (e) { const box = $(bodyId); if (!box.dataset.loaded) box.innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; }
+  };
+  run();
+  if (interval) timers[key] = setInterval(() => { if (!document.hidden) run(); }, interval);
+}
+
+/* ---------------- state ---------------- */
+const state = { codeplug: null, ws: [], tab: "zones", zone: null, cp: {}, filter: "", busy: false };
+
+/* ---------------- hotspot / bm / sync / last heard ---------------- */
+function renderHotspot(p){
+  const svc = p.services || {};
+  const allUp = Object.values(svc).length && Object.values(svc).every(v => v === "active");
+  setPill("pill-hs", allUp ? "ok" : "bad", allUp ? "Hotspot online" : t("Hotspot: υπηρεσία εκτός"));
+  const duplex = String(p.duplex) === "1";
+  const modes = Object.entries(p.modes_enabled || {}).filter(([,v]) => v).map(([k]) => k).join(", ") || "—";
+  const net = p.dmr_network || {};
+  $("hs-body").innerHTML = `
+    <div class="freqpair">
+      <div class="freqbox"><div class="label">${t("Ασύρματος RX")}</div><div class="freq">${fmtF(p.tx_mhz)}</div></div>
+      <div class="freqbox"><div class="label">${t("Ασύρματος TX")}</div><div class="freq tx">${fmtF(duplex ? p.rx_mhz : p.tx_mhz)}</div></div>
+    </div>
+    <dl class="kv">
+      <dt>Hotspot</dt><dd class="mono">RX ${fmtF(p.rx_mhz)} · TX ${fmtF(p.tx_mhz)} MHz</dd>
+      <dt>${t("Λειτουργία")}</dt><dd>${duplex ? "Duplex, TS1 + TS2" : "Simplex"} · CC ${esc(p.color_code ?? "—")}</dd>
+      <dt>Modes</dt><dd>${esc(modes)}</dd>
+      <dt>${t("Υπηρεσίες")}</dt><dd>${Object.entries(svc).map(([k,v]) => `<span class="chip">${esc(k)} <b style="color:var(--${v==="active"?"ok":"bad"})">${esc(v)}</b></span>`).join(" ")}</dd>
+      <dt>Pi</dt><dd>${esc(p.uptime || "")}${p.cpu_temp_c != null ? ` · ${esc(p.cpu_temp_c)} °C` : ""}</dd>
+      <dt>Gateway</dt><dd class="mono">${esc(net.Type || "")} ${esc(net.Address || "")}:${esc(net.Port || "")}</dd>
+    </dl>`;
+}
+function renderBM(p){
+  const d = p.device || {}, prof = p.profile || {};
+  const linked = /link/i.test(d.statusText || "");
+  setPill("pill-bm", p.device_error ? "bad" : linked ? "ok" : "warn", p.device_error ? t("BrandMeister: σφάλμα") : (d.statusText || "BrandMeister"));
+  const subs = [];
+  for (const [k, lab] of [["staticSubscriptions","static"],["dynamicSubscriptions","dynamic"],["timedSubscriptions","timed"]])
+    for (const s of prof[k] || []) subs.push({ lab, tg: s.talkgroup, slot: s.slot });
+  $("bm-body").innerHTML = p.device_error ? `<div class="err">${esc(p.device_error)}</div>` : `
+    <dl class="kv">
+      <dt>Device</dt><dd class="mono">${esc(d.id || p.device_id)} · master ${esc(d.lastKnownMaster || "—")}</dd>
+      <dt>${t("Κατάσταση")}</dt><dd>${esc(d.statusText || "—")}</dd>
+      <dt>Hardware</dt><dd>${esc(d.hardware || "—")} · ${esc(d.firmware || "")}</dd>
+      <dt>${t("Τελ. επαφή")}</dt><dd class="mono">${esc(d.last_seen || "—")} UTC</dd>
+    </dl>
+    <div><div class="label">${t("Talkgroups στο hotspot")}</div>
+      <div class="chips" style="margin-top:6px">${subs.length ? subs.map(s => `<span class="chip">TG ${esc(s.tg)} <b>TS${esc(s.slot === "0" ? "–" : s.slot)}</b> ${esc(s.lab)}</span>`).join("") : `<span class="note">${t("Κανένα static ή dynamic.")}</span>`}</div>
+    </div>`;
+}
+function renderSync(p){
+  if (!p || !p.codeplug){ setPill("pill-sync", "idle", t("Sync: χωρίς codeplug")); $("sync-body").innerHTML = `<p class="note">${t("Δεν υπάρχει codeplug στο workspace ακόμα.")}</p>`; return; }
+  const inSync = !!p.in_sync;
+  setPill("pill-sync", inSync ? "ok" : "warn", inSync ? t("Codeplug σε sync") : t("Codeplug εκτός sync"));
+  const items = [];
+  (p.missing || []).forEach(n => items.push(`<li>${t("Λείπει")} <span class="mono">${esc(n)}</span></li>`));
+  (p.outdated || []).forEach(o => items.push(`<li><span class="mono">${esc(o.name)}</span>: ${esc((o.problems || []).join(", "))}</li>`));
+  (p.extra || []).forEach(n => items.push(`<li>${t("Περισσεύει")} <span class="mono">${esc(n)}</span></li>`));
+  $("sync-body").innerHTML = `
+    <div class="syncstate ${inSync ? "ok" : "warn"}">${inSync ? t("Σε συμφωνία") : (items.length === 1 ? t("1 διαφορά") : items.length + t(" διαφορές"))}</div>
+    <div class="note">Zone «${esc(p.zone)}${t("» στο")} <span class="mono">${esc(p.codeplug)}</span> · ${(p.ok || []).length} ${t("κανάλια σωστά")}</div>
+    ${items.length ? `<ul class="diffl">${items.slice(0, 10).join("")}${items.length > 10 ? `<li>${t("… και")} ${items.length - 10} ${t("ακόμα")}</li>` : ""}</ul>` : ""}
+    <div class="row"><label class="label" for="extra-tg">${t("Επιπλέον TG")}</label><input type="text" id="extra-tg" placeholder="${t("π.χ. 2021:2, 9112:1")}" size="16"></div>
+    <div class="row"><button id="btn-sync" class="primary">${t("Συγχρονισμός codeplug")}</button><span class="note" id="sync-msg"></span></div>
+    <div class="confirm" id="sync-confirm" hidden>
+      <div>${t("Θα ενημερωθεί το αρχείο")} <b class="mono">${esc(p.codeplug)}</b>${t(": κανάλια «HS …» στη zone «")}${esc(p.zone)}${t("» από τις συχνότητες και τα TG του WPSD. Ο ασύρματος δεν αλλάζει.")}</div>
+      <div class="row"><button class="primary" id="btn-sync-go">${t("Ενημέρωση αρχείου")}</button><button id="btn-sync-cancel">${t("Άκυρο")}</button></div>
+    </div>`;
+  $("btn-sync").onclick = () => { $("sync-confirm").hidden = false; $("btn-sync").disabled = true; };
+  $("btn-sync-cancel").onclick = () => { $("sync-confirm").hidden = true; $("btn-sync").disabled = false; };
+  $("btn-sync-go").onclick = async () => {
+    $("btn-sync-go").disabled = true; $("sync-msg").textContent = t("Ενημερώνω…");
+    const extra = ($("extra-tg").value || "").split(/[,\s]+/).filter(Boolean).map(t => { const [tg, slot] = t.split(":"); return { tg: parseInt(tg, 10), slot: parseInt(slot || "2", 10) }; }).filter(t => Number.isFinite(t.tg));
+    try {
+      const r = await api("codeplug_sync_wpsd", { codeplug: state.codeplug, extra_talkgroups: extra });
+      const a = r.applied || {};
+      $("sync-msg").textContent = r.changed ? `${t("Έγινε:")} ${(a.created||[]).length} ${t("νέα,")} ${(a.updated||[]).length} ${t("ενημερωμένα,")} ${(a.removed||[]).length} ${t("αφαιρέθηκαν")}${r.validation && !r.validation.ok ? t(" · ΠΡΟΣΟΧΗ: αποτυχία ελέγχου") : t(" · έλεγχος OK")}.` : t("Ήταν ήδη σε συμφωνία.");
+      reloadCodeplug();
+    } catch (e) { $("sync-msg").textContent = errCopy(e); }
+    finally { $("sync-confirm").hidden = true; $("btn-sync").disabled = false; }
+  };
+}
+const lh = { expanded: false, live: false };
+function lhArgs(){ return { limit: lh.expanded ? 30 : 3, rf_only: $("rf-only").checked }; }
+function lhStart(){ poll("lh", "wpsd_last_heard", lhArgs, renderLH, "lh-body", "f-lh", lh.live ? 5000 : 30000); }
+function renderLH(p){
+  const ev = (p && p.events) || [];
+  $("lh-more").textContent = lh.expanded ? t("Λιγότερα") : t("Περισσότερα");
+  if (!ev.length){ $("lh-body").innerHTML = `<div class="empty">${t("Καμία εκπομπή στα logs.")}</div>`; return; }
+  $("lh-body").innerHTML = `<table><thead><tr><th>${t("Ώρα")}</th><th>${t("Από")}</th><th>${t("Προς")}</th><th>TS</th><th>${t("Πηγή")}</th><th>${t("Διάρκ.")}</th><th>BER</th></tr></thead><tbody>${
+    ev.map(e => { const tm = e.time_utc ? new Date(e.time_utc.replace(" ", "T") + "Z") : null;
+      return `<tr><td class="num">${tm ? esc(tm.toLocaleString(LOCALE, {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"})) : ""}</td>
+        <td class="call">${flag(e.from)}${esc(e.from || "")}</td><td class="num">${esc(e.to || "")}${e.tg_name ? ` <span class="note">${esc(e.tg_name)}</span>` : ""}</td>
+        <td>${e.slot ? `<span class="ts">TS${esc(e.slot)}</span>` : ""}</td>
+        <td><span class="src ${e.source === "RF" ? "rf" : "net"}">${e.source === "RF" ? "RF" : "NET"}</span></td>
+        <td class="num">${e.duration_s != null ? esc(e.duration_s.toFixed(1)) + " s" : ""}</td>
+        <td class="num">${e.ber_pct != null ? esc(e.ber_pct.toFixed(1)) + "%" : ""}</td></tr>`; }).join("")}</tbody></table>`;
+}
+
+/* ---------------- codeplug: loading ---------------- */
+function renderList(p){
+  const ws = (p && p.workspace) || [];
+  state.ws = ws;
+  const sel = $("cp-select");
+  if (!ws.length){ sel.innerHTML = "<option>—</option>"; $("cp-body").innerHTML = `<div class="empty">${t("Δεν υπάρχει codeplug ακόμα. Πάτα «Read» με τον ασύρματο συνδεδεμένο στον server.")}</div>`; return; }
+  const names = ws.map(w => w.name);
+  if (!state.codeplug || !names.includes(state.codeplug))
+    state.codeplug = ["current", "last-read"].find(n => names.includes(n)) || [...ws].sort((a,b) => b.modified - a.modified)[0].name;
+  sel.innerHTML = names.map(n => `<option ${n === state.codeplug ? "selected" : ""}>${esc(n)}</option>`).join("");
+  const w = ws.find(x => x.name === state.codeplug);
+  $("cp-meta").textContent = w ? `${t("Αρχείο")} ${w.name} ${t("· τελευταία αλλαγή")} ${new Date(w.modified * 1000).toLocaleString(LOCALE)}` + (w.name !== "current" ? t(" · ΠΡΟΣΟΧΗ: επεξεργάζεσαι αρχείο που δεν είναι το current") : "") : "";
+  reloadCodeplug();
+}
+async function reloadCodeplug(){
+  if (!state.codeplug) return;
+  const cp = state.codeplug;
+  try {
+    const [zones, channels, contacts, gls, scans] = await Promise.all(
+      ["zones", "channels", "contacts", "groupLists", "scanLists"].map(sec => api("codeplug_get", { codeplug: cp, section: sec, limit: 5000 }).then(r => r.entries || [])));
+    state.cp = { zones, channels, contacts, groupLists: gls, scanLists: scans,
+      chById: Object.fromEntries(channels.map(c => [c.id, c])), ctById: Object.fromEntries(contacts.map(c => [c.id, c])),
+      glById: Object.fromEntries(gls.map(g => [g.id, g])) };
+    renderCodeplug();
+    api("wpsd_sync_status", { codeplug: cp }).then(renderSync).catch(() => {});
+  } catch (e) { $("cp-body").innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; }
+}
+function renderCodeplug(){
+  document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
+  const r = { zones: renderZones, channels: renderChannels, contacts: renderContacts, grouplists: renderGroupLists, scanlists: renderScanLists, fm: renderFM, rpt: renderRpt, preset: renderPresets }[state.tab];
+  r();
+}
+function chanRow(c, extra = ""){
+  const dmr = c.kind === "dmr";
+  const ct = state.cp.ctById[c.contact];
+  const tone = c.txTone && typeof c.txTone === "object" ? (c.txTone.ctcss || (c.txTone.dcs != null ? "DCS " + c.txTone.dcs : "")) : "";
+  return `<tr class="rowbtn" data-ch="${esc(c.id)}"><td>${esc(c.name)}</td><td class="num">${esc(fmtF(c.rxFrequency))}</td><td class="num">${esc(fmtF(c.txFrequency))}</td>
+    <td>${dmr ? `DMR <span class="ts">${esc(c.timeSlot || "")}</span> <span class="note">CC${esc(c.colorCode ?? "")}</span>` : `FM <span class="note">${esc(c.bandwidth || "")}</span>`}</td>
+    <td class="num">${dmr ? (ct ? `${esc(ct.number)} <span class="note">${esc(ct.name)}</span>` : "—") : esc(tone || "—")}</td>
+    <td class="note">${esc(c.power && c.power !== "!default" ? c.power : "")}</td>${extra}</tr>`;
+}
+const CH_HEAD = `<thead><tr><th>${t("Κανάλι")}</th><th>RX</th><th>TX</th><th>Mode</th><th>TG / Tone</th><th>${t("Ισχύς")}</th>%EXTRA%</tr></thead>`;
+
+/* ---------------- zones tab ---------------- */
+function renderZones(){
+  const { zones, chById } = state.cp;
+  const inZone = new Set(zones.flatMap(z => [...(z.A || []), ...(z.B || [])]));
+  const loose = state.cp.channels.filter(c => !inZone.has(c.id));
+  const list = zones.map(z => ({ id: z.id, name: z.name, chans: [...(z.A || []), ...(z.B || [])], real: true }));
+  if (loose.length) list.push({ id: "__loose", name: t("Χωρίς zone"), chans: loose.map(c => c.id) });
+  if (!list.find(z => z.id === state.zone)) state.zone = (list.find(z => /wpsd/i.test(z.name)) || list[0] || {}).id;
+  const zone = list.find(z => z.id === state.zone);
+  const rows = (zone ? zone.chans : []).map(id => chById[id]).filter(Boolean);
+  $("cp-body").innerHTML = `
+    <div class="cpgrid">
+      <div>
+        <div class="row" style="margin-bottom:6px"><button class="small primary" id="btn-zone-new">+ Zone</button>${zone && zone.real ? `<button class="small" id="btn-zone-ren">${t("Μετονομασία")}</button><button class="small danger" id="btn-zone-del">${t("Διαγραφή")}</button>` : ""}</div>
+        <nav class="zones">${list.map(z => `<button type="button" data-z="${esc(z.id)}" aria-pressed="${z.id === state.zone}"><span>${esc(z.name)}${/wpsd/i.test(z.name) ? ' <span class="managed">SYNC</span>' : ""}</span><span class="n">${z.chans.length}</span></button>`).join("")}</nav>
+      </div>
+      <div>
+        <div class="row" style="margin-bottom:6px">
+          <span class="label">${esc(zone ? zone.name : "")} · ${rows.length} ${t("κανάλια")}</span><span class="grow"></span>
+          ${zone && zone.real ? `<button class="small" id="btn-zone-add">${t("+ Υπάρχον κανάλι")}</button><button class="small primary" id="btn-ch-new">${t("+ Νέο κανάλι")}</button>` : ""}
+        </div>
+        <div class="tablewrap">${rows.length ? `<table>${CH_HEAD.replace("%EXTRA%", "<th></th>")}<tbody>${rows.map((c, i) => chanRow(c, zone.real ? `<td class="acts"><button class="small" data-mv="${i}:-1" title="${t("Πάνω")}">↑</button><button class="small" data-mv="${i}:1" title="${t("Κάτω")}">↓</button><button class="small" data-rm="${esc(c.id)}" title="${t("Αφαίρεση από τη zone")}">✕</button></td>` : "<td></td>")).join("")}</tbody></table>` : `<div class="empty">${t("Η zone είναι άδεια.")}</div>`}</div>
+      </div>
+    </div>`;
+  $("cp-body").querySelectorAll("[data-z]").forEach(b => b.onclick = () => { state.zone = b.dataset.z; renderZones(); });
+  $("cp-body").querySelectorAll("tr[data-ch]").forEach(tr => tr.onclick = (e) => { if (e.target.closest("button")) return; openChannel(tr.dataset.ch); });
+  const zid = state.zone;
+  $("cp-body").querySelectorAll("[data-mv]").forEach(b => b.onclick = async () => {
+    const [i, d] = b.dataset.mv.split(":").map(Number); const ids = zone.chans.slice(); const j = i + d;
+    if (j < 0 || j >= ids.length) return; [ids[i], ids[j]] = [ids[j], ids[i]];
+    await edit("codeplug_zone_set", { codeplug: state.codeplug, zone: zid, channels: ids, mode: "replace" });
+  });
+  $("cp-body").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => edit("codeplug_zone_set", { codeplug: state.codeplug, zone: zid, channels: [b.dataset.rm], mode: "remove" }));
+  $("btn-zone-new").onclick = () => prompt1(t("Νέα zone"), t("Όνομα (έως 16 χαρ.)"), "", async (name) => { const r = await edit("codeplug_upsert", { codeplug: state.codeplug, section: "zones", entry: { name: name.slice(0, 16), A: [], B: [] } }); state.zone = r.id; renderZones(); });
+  if (zone && zone.real) {
+    $("btn-zone-ren").onclick = () => prompt1(t("Μετονομασία zone"), t("Νέο όνομα"), zone.name, (name) => edit("codeplug_upsert", { codeplug: state.codeplug, section: "zones", entry: { id: zid, name: name.slice(0, 16) } }));
+    $("btn-zone-del").onclick = () => confirmBox(`${t("Διαγραφή της zone «")}${zone.name}${t("»; Τα κανάλια της μένουν στο codeplug.")}`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "zones", ids: [zid] }).then(() => { state.zone = null; }));
+    $("btn-zone-add").onclick = () => pickChannels(zone.chans, (ids) => edit("codeplug_zone_set", { codeplug: state.codeplug, zone: zid, channels: ids, mode: "append" }));
+    $("btn-ch-new").onclick = () => openChannel(null, zid);
+  }
+}
+
+/* ---------------- channels tab ---------------- */
+function renderChannels(){
+  const q = state.filter.toLowerCase();
+  const rows = state.cp.channels.filter(c => !q || c.name.toLowerCase().includes(q) || String(c.rxFrequency || "").includes(q) || String((state.cp.ctById[c.contact] || {}).number || "").includes(q));
+  $("cp-body").innerHTML = `
+    <div class="row" style="margin-bottom:6px"><input type="text" id="ch-filter" placeholder="${t("Αναζήτηση: όνομα, συχνότητα, TG")}" value="${esc(state.filter)}" style="flex:1 1 200px"><span class="note">${rows.length} / ${state.cp.channels.length}</span><button class="small primary" id="btn-ch-new2">${t("+ Νέο κανάλι")}</button></div>
+    <div class="tablewrap" style="max-height:560px;overflow:auto"><table>${CH_HEAD.replace("%EXTRA%", "<th>Zones</th>").replace("<thead><tr>", `<thead><tr><th><input type="checkbox" id="ch-all" title="${t("Επιλογή όλων")}"></th>`)}<tbody>${rows.slice(0, 400).map(c => chanRow(c, `<td class="note">${esc(zonesOf(c.id).join(", "))}</td>`).replace('<td>', `<td><input type="checkbox" class="ch-sel" data-id="${esc(c.id)}"></td><td>`)).join("")}</tbody></table>${rows.length > 400 ? `<div class="note">${t("Εμφανίζονται τα πρώτα 400. Φίλτραρε για περισσότερα.")}</div>` : ""}</div>
+    <div class="row" style="margin-top:6px"><button class="small danger" id="ch-del-sel" disabled>${t("Διαγραφή επιλεγμένων")}</button><span class="note" id="ch-sel-n"></span></div>`;
+  const f = $("ch-filter"); f.oninput = () => { state.filter = f.value; const pos = f.selectionStart; renderChannels(); const g = $("ch-filter"); g.focus(); g.setSelectionRange(pos, pos); };
+  $("cp-body").querySelectorAll("tr[data-ch]").forEach(tr => tr.onclick = (ev) => { if (ev.target.classList.contains("ch-sel")) return; openChannel(tr.dataset.ch); });
+  $("btn-ch-new2").onclick = () => openChannel(null);
+  const selCount = () => { const n = $("cp-body").querySelectorAll(".ch-sel:checked").length; $("ch-del-sel").disabled = !n; $("ch-sel-n").textContent = n ? `${n} ${t("επιλεγμένα")}` : ""; };
+  $("cp-body").querySelectorAll(".ch-sel").forEach(c => c.onchange = selCount);
+  $("ch-all").onchange = (e) => { $("cp-body").querySelectorAll(".ch-sel").forEach(c => c.checked = e.target.checked); selCount(); };
+  $("ch-del-sel").onclick = () => { const ids = [...$("cp-body").querySelectorAll(".ch-sel:checked")].map(c => c.dataset.id); confirmBox(`${t("Διαγραφή")} ${ids.length} ${t("καναλιών από το codeplug και από όλες τις zones;")}`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "channels", ids }).then(() => toast(t("Διαγράφηκαν.")))); };
+}
+function zonesOf(chId){ return state.cp.zones.filter(z => (z.A || []).includes(chId) || (z.B || []).includes(chId)).map(z => z.name); }
+
+/* ---------------- contacts tab ---------------- */
+function renderContacts(){
+  const q = state.filter.toLowerCase();
+  const rows = state.cp.contacts.filter(c => !q || String(c.name).toLowerCase().includes(q) || String(c.number || "").includes(q));
+  $("cp-body").innerHTML = `
+    <div class="row" style="margin-bottom:6px"><input type="text" id="ct-filter" placeholder="${t("Αναζήτηση επαφής / TG")}" value="${esc(state.filter)}" style="flex:1 1 200px"><span class="note">${rows.length}</span><button class="small primary" id="btn-ct-new">${t("+ Επαφή / TG")}</button></div>
+    <div class="tablewrap" style="max-height:560px;overflow:auto"><table><thead><tr><th><input type="checkbox" id="ct-all" title="${t("Επιλογή όλων")}"></th><th>${t("Όνομα")}</th><th>${t("Αριθμός")}</th><th>${t("Τύπος")}</th><th>${t("Χρήση")}</th></tr></thead><tbody>${rows.map(c => {
+      const used = state.cp.channels.filter(ch => ch.contact === c.id).length;
+      return `<tr class="rowbtn" data-ct="${esc(c.id)}"><td><input type="checkbox" class="ct-sel" data-id="${esc(c.id)}"></td><td>${esc(c.name)}</td><td class="num">${esc(c.number ?? "")}</td><td class="note">${esc(c.type || c.kind || "")}</td><td class="note">${used ? used + t(" κανάλια") : ""}</td></tr>`; }).join("")}</tbody></table></div>
+    <div class="row" style="margin-top:6px"><button class="small danger" id="ct-del-sel" disabled>${t("Διαγραφή επιλεγμένων")}</button><span class="note" id="ct-sel-n"></span></div>`;
+  const f = $("ct-filter"); f.oninput = () => { state.filter = f.value; const pos = f.selectionStart; renderContacts(); const g = $("ct-filter"); g.focus(); g.setSelectionRange(pos, pos); };
+  $("cp-body").querySelectorAll("tr[data-ct]").forEach(tr => tr.onclick = (ev) => { if (ev.target.classList.contains("ct-sel")) return; openContact(tr.dataset.ct); });
+  $("btn-ct-new").onclick = () => openContact(null);
+  const selCount = () => { const n = $("cp-body").querySelectorAll(".ct-sel:checked").length; $("ct-del-sel").disabled = !n; $("ct-sel-n").textContent = n ? `${n} ${t("επιλεγμένα")}` : ""; };
+  $("cp-body").querySelectorAll(".ct-sel").forEach(c => c.onchange = selCount);
+  $("ct-all").onchange = (e) => { $("cp-body").querySelectorAll(".ct-sel").forEach(c => c.checked = e.target.checked); selCount(); };
+  $("ct-del-sel").onclick = () => { const ids = [...$("cp-body").querySelectorAll(".ct-sel:checked")].map(c => c.dataset.id); confirmBox(`${t("Διαγραφή")} ${ids.length} ${t("επαφών; Θα αφαιρεθούν από κανάλια και group lists.")}`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "contacts", ids }).then(() => toast(t("Διαγράφηκαν.")))); };
+}
+
+/* ---------------- group lists tab ---------------- */
+function renderGroupLists(){
+  $("cp-body").innerHTML = `
+    <div class="row" style="margin-bottom:6px"><span class="grow"></span><button class="small primary" id="btn-gl-new">+ Group list</button></div>
+    <div class="tablewrap"><table><thead><tr><th>${t("Όνομα")}</th><th>${t("Μέλη (TG)")}</th><th>${t("Κανάλια")}</th></tr></thead><tbody>${state.cp.groupLists.map(g => {
+      const names = (g.contacts || []).map(id => state.cp.ctById[id]).filter(Boolean).map(c => `${c.number}`).join(", ");
+      const used = state.cp.channels.filter(ch => ch.groupList === g.id).length;
+      return `<tr class="rowbtn" data-gl="${esc(g.id)}"><td>${esc(g.name)}</td><td class="num note">${esc(names) || "—"}</td><td class="note">${used || ""}</td></tr>`; }).join("")}</tbody></table></div>`;
+  $("cp-body").querySelectorAll("tr[data-gl]").forEach(tr => tr.onclick = () => openGroupList(tr.dataset.gl));
+  $("btn-gl-new").onclick = () => openGroupList(null);
+}
+
+/* ---------------- scan lists tab ---------------- */
+function renderScanLists(){
+  $("cp-body").innerHTML = `
+    <div class="row" style="margin-bottom:6px"><span class="grow"></span><button class="small primary" id="btn-sl-new">+ Scan list</button></div>
+    <div class="tablewrap"><table><thead><tr><th>${t("Όνομα")}</th><th>${t("Κανάλια")}</th></tr></thead><tbody>${state.cp.scanLists.map(s => {
+      const names = (s.channels || []).map(id => state.cp.chById[id]).filter(Boolean).map(c => c.name);
+      return `<tr class="rowbtn" data-sl="${esc(s.id)}"><td>${esc(s.name)}</td><td class="note">${esc(names.slice(0, 8).join(", "))}${names.length > 8 ? ` … (${names.length})` : ""}</td></tr>`; }).join("") || `<tr><td colspan="2" class="empty">${t("Καμία scan list.")}</td></tr>`}</tbody></table></div>`;
+  $("cp-body").querySelectorAll("tr[data-sl]").forEach(tr => tr.onclick = () => openScanList(tr.dataset.sl));
+  $("btn-sl-new").onclick = () => openScanList(null);
+}
+
+
+/* ---------------- FM broadcast tab ---------------- */
+const fmState = { list: null, country: "gr", cities: [], city: "", stations: [], busy: false };
+function fmLogo(s){ return s && s.logo ? `<img class="logo" src="fm/logo/${esc(s.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ""; }
+async function fmLoadList(){ const r = await api("fm_list", { codeplug: state.codeplug }); fmState.list = r.stations; fmState.max = r.max; fmState.writtenAt = r.written_at; }
+async function fmSave(list){ const r = await api("fm_list_set", { codeplug: state.codeplug, stations: list, mode: "replace" }); await fmLoadList(); if (r.dropped) toast(`${r.dropped} ${t("σταθμοί κόπηκαν (όριο 100)")}`); renderFM(); }
+function fmName(mhz){ const hit = fmState.stations.find(s => Math.abs(s.mhz - mhz) < 0.005); return hit ? hit.name : ""; }
+async function renderFM(){
+  if (fmState.list === null || fmState.listFor !== state.codeplug) { fmState.listFor = state.codeplug; try { await fmLoadList(); } catch (e) { $("cp-body").innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; return; } }
+  const L = fmState.list;
+  const left = `
+    <div class="row" style="margin-bottom:6px"><b>${t("Μνήμες FM του")} «${esc(state.codeplug)}»</b> <span class="note">${L.length}/${fmState.max || 100}${fmState.writtenAt ? ` · ${t("στον ασύρματο:")} ${new Date(fmState.writtenAt * 1000).toLocaleString(LOCALE)}` : ` · ${t("δεν έχει γραφτεί")}`}</span><span class="grow"></span>
+      <button class="small" id="fm-read" title="${t("Διαβάζει τις μνήμες FM που έχει τώρα ο ασύρματος (σύντομη σύνδεση, μετά επανεκκινεί)")}">⟵ ${t("Από ασύρματο")}</button>
+      <button class="small tx" id="fm-write" ${L.length ? "" : "disabled"} title="${t("Γράφει μόνο τις μνήμες FM (δευτερόλεπτα). Το κανονικό Write τις περιλαμβάνει επίσης.")}">${t("Γράψε FM")} ⟶</button>
+      <button class="small danger" id="fm-clear" ${L.length ? "" : "disabled"}>${t("Καθάρισμα")}</button></div>
+    <div class="tablewrap" style="max-height:480px;overflow:auto"><table><thead><tr><th><input type="checkbox" id="fm-all" title="${t("Επιλογή όλων")}"></th><th>#</th><th>MHz</th><th>${t("Σταθμός")}</th><th>${t("Περιοχή")}</th><th></th></tr></thead><tbody>
+      ${L.map((s, i) => `<tr><td><input type="checkbox" class="fm-sel" data-i="${i}"></td><td class="num note">${i + 1}</td><td class="num">${s.mhz.toFixed(1)}</td><td class="nm">${fmLogo(s)}<input type="text" class="fm-name" data-i="${i}" value="${esc(s.name)}" maxlength="32" placeholder="—"></td><td class="note area">${esc(s.area || "")}</td><td><button class="small" data-del="${i}" title="${t("Αφαίρεση")}">✕</button></td></tr>`).join("") || `<tr><td colspan="6" class="empty">${t("Καμία μνήμη FM. Διάλεξε σταθμούς δεξιά ή πρόσθεσε χειροκίνητα.")}</td></tr>`}
+    </tbody></table></div>
+    <div class="row" style="margin-top:6px"><button class="small danger" id="fm-del-sel" disabled>${t("Διαγραφή επιλεγμένων")}</button><span class="note" id="fm-sel-n"></span></div>
+    <div class="row" style="margin-top:6px"><input type="number" id="fm-mhz" step="0.1" min="64" max="108" placeholder="MHz" style="width:6em"><input type="text" id="fm-nm" placeholder="${t("Όνομα (προαιρετικό)")}" maxlength="32"><button class="small" id="fm-add">+ ${t("Προσθήκη")}</button></div>`;
+  const cityOpts = fmState.cities.map(c => `<option value="${esc(c.slug)}" ${c.slug === fmState.city ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  const right = `
+    <div class="row" style="margin-bottom:6px"><b>${t("Σταθμοί ανά περιοχή")}</b><span class="grow"></span>
+      <input type="text" id="fm-cc" value="${esc(fmState.country)}" maxlength="5" style="width:4em" title="${t("Κωδικός χώρας ISO (gr, cy, de…)")}">
+      <select id="fm-city" ${fmState.cities.length ? "" : "disabled"}><option value="">${fmState.cities.length ? t("— πόλη —") : t("(φόρτωσε χώρα)")}</option>${cityOpts}</select>
+      <button class="small" id="fm-load">${t("Φόρτωση")}</button></div>
+    ${fmState.stations.length ? `<div class="row" style="margin-bottom:6px"><button class="small primary" id="fm-add-sel">+ ${t("Προσθήκη επιλεγμένων")}</button><button class="small" id="fm-add-all">+ ${t("Όλοι")} (${fmState.stations.length})</button><span class="grow"></span><span class="note">${t("Πηγή:")} radiomap.eu</span></div>
+    <div class="tablewrap" style="max-height:420px;overflow:auto"><table><thead><tr><th></th><th>MHz</th><th>${t("Σταθμός")}</th><th>${t("Πομπός")}</th></tr></thead><tbody>
+      ${fmState.stations.map((s, i) => { const have = L.some(x => Math.abs(x.mhz - s.mhz) < 0.005); return `<tr><td><input type="checkbox" class="fm-pick" data-i="${i}" ${have ? "checked disabled" : ""}></td><td class="num">${s.mhz.toFixed(1)}</td><td class="nm">${fmLogo(s)}${esc(s.name)}</td><td class="note">${esc(s.site || "")}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="note">${t("Διάλεξε χώρα και πόλη και πάτα «Φόρτωση». Οι λίστες προέρχονται από το radiomap.eu.")}</div>`}`;
+  $("cp-body").innerHTML = `<div class="fmgrid"><div>${left}</div><div>${right}</div></div>`;
+  if (state.radioPresent === false) radioButtons(false);
+  $("cp-body").querySelectorAll(".fm-name").forEach(inp => inp.onchange = async () => { const l = L.slice(); l[+inp.dataset.i] = { ...l[+inp.dataset.i], name: inp.value }; await fmSave(l); });
+  $("cp-body").querySelectorAll("[data-del]").forEach(b => b.onclick = async (ev) => { ev.preventDefault(); const l = L.slice(); l.splice(+b.dataset.del, 1); await fmSave(l); });
+  const selCount = () => { const n = $("cp-body").querySelectorAll(".fm-sel:checked").length; $("fm-del-sel").disabled = !n; $("fm-sel-n").textContent = n ? `${n} ${t("επιλεγμένα")}` : ""; };
+  $("cp-body").querySelectorAll(".fm-sel").forEach(c => c.onchange = selCount);
+  $("fm-all").onchange = (e) => { $("cp-body").querySelectorAll(".fm-sel").forEach(c => c.checked = e.target.checked); selCount(); };
+  $("fm-del-sel").onclick = () => { const idx = new Set([...$("cp-body").querySelectorAll(".fm-sel:checked")].map(c => +c.dataset.i)); confirmBox(`${t("Διαγραφή")} ${idx.size} ${t("μνημών FM από τη λίστα;")}`, () => fmSave(L.filter((_, i) => !idx.has(i)))); };
+  $("fm-add").onclick = async () => { const m = parseFloat($("fm-mhz").value); if (!(m >= 64 && m <= 108)) { toast(t("Δώσε συχνότητα 64–108 MHz")); return; } await fmSave([...L, { mhz: Math.round(m * 100) / 100, name: $("fm-nm").value }]); };
+  $("fm-clear").onclick = () => confirmBox(t("Να αδειάσει η λίστα FM του codeplug;"), () => fmSave([]));
+  $("fm-load").onclick = async () => {
+    const cc = $("fm-cc").value.trim().toLowerCase(); const city = $("fm-city").value;
+    try {
+      if (cc !== fmState.country || !fmState.cities.length) { fmState.country = cc; fmState.cities = (await api("fm_cities", { country: cc })).cities; fmState.city = ""; fmState.stations = []; renderFM(); return; }
+      if (!city) { toast(t("Διάλεξε πόλη")); return; }
+      fmState.city = city; fmState.stations = (await api("fm_stations", { country: cc, city })).stations; renderFM();
+    } catch (e) { toast(errCopy(e), 6000); }
+  };
+  $("fm-city").onchange = (e) => { fmState.city = e.target.value; $("fm-load").click(); };
+  const areaName = () => (fmState.cities.find(c => c.slug === fmState.city) || {}).name || fmState.city || "";
+  const addMany = async (items) => { await fmSave([...L, ...items.map(s => ({ mhz: s.mhz, name: s.name, area: areaName(), logo: s.logo || "" }))]); };
+  if ($("fm-add-sel")) {
+    $("fm-add-sel").onclick = () => addMany([...$("cp-body").querySelectorAll(".fm-pick:checked:not(:disabled)")].map(c => fmState.stations[+c.dataset.i]));
+    $("fm-add-all").onclick = () => addMany(fmState.stations.filter(s => !L.some(x => Math.abs(x.mhz - s.mhz) < 0.005)));
+  }
+  $("fm-read").onclick = async () => {
+    if (state.busy) return; state.busy = true;
+    opBox(`<div class="confirm"><b>${t("Διαβάζω τις μνήμες FM…")}</b><div class="progress"><i></i></div></div>`);
+    try {
+      if (!(await radioPresent())) throw { message: NO_RADIO };
+      const r = await job("fm_radio_read", {});
+      const items = (r.stations || []).map(s => ({ mhz: s.mhz, name: s.name || fmName(s.mhz) }));
+      opBox(`<div class="okbox">${t("Ο ασύρματος έχει")} ${r.count} ${t("μνήμες FM")}: <span class="mono">${esc(items.map(s => s.mhz.toFixed(1)).join(" "))}</span>
+        <div class="row" style="margin-top:6px"><button class="small primary" id="fm-use">${t("Χρήση ως λίστα του codeplug")}</button><button class="small" id="op-close">${t("Κλείσιμο")}</button></div></div>`);
+      $("op-close").onclick = () => { $("radio-op").hidden = true; };
+      $("fm-use").onclick = async () => { await fmSave(items); $("radio-op").hidden = true; };
+    } catch (e) { opBox(`<div class="err">${esc(errCopy(e))}</div>`); }
+    finally { state.busy = false; }
+  };
+  $("fm-write").onclick = async () => {
+    if (state.busy) return; state.busy = true;
+    try {
+      const p = await job("fm_radio_write", { codeplug: state.codeplug });
+      opBox(`<div class="confirm"><div><b>${t("Εγγραφή")} ${p.count} ${t("μνημών FM στον ασύρματο")}</b> — ${t("αντικαθιστά όλες τις μνήμες FM του ασυρμάτου. Διαρκεί δευτερόλεπτα· μετά ο ασύρματος επανεκκινεί.")}</div>
+        <div class="row"><button class="tx" id="op-go">${t("Γράψε FM")}</button><button id="op-cancel">${t("Άκυρο")}</button></div></div>`);
+      $("op-cancel").onclick = () => { $("radio-op").hidden = true; state.busy = false; };
+      $("op-go").onclick = async () => {
+        $("op-go").disabled = true;
+        try {
+          if (!(await radioPresent())) throw { message: NO_RADIO };
+          const r = await job("fm_radio_write", { codeplug: state.codeplug, confirm_token: p.confirm_token });
+          if (!r.ok) throw { message: JSON.stringify(r.failed || r.error || r) };
+          await fmLoadList().catch(() => {});
+          opBox(`<div class="okbox">${t("Οι μνήμες FM γράφτηκαν")} (${r.sent} blocks, ${r.skipped} ${t("ίδια παραλείφθηκαν")}, ${r.seconds} s). ${t("Ο ασύρματος θα κάνει επανεκκίνηση.")}<div class="row" style="margin-top:6px"><button class="small" id="op-close">${t("Κλείσιμο")}</button></div></div>`);
+          $("op-close").onclick = () => { $("radio-op").hidden = true; };
+        } catch (e) { opBox(`<div class="err">${t("Η εγγραφή απέτυχε:")} ${esc(errCopy(e))}</div>`); }
+        finally { state.busy = false; }
+      };
+      return;
+    } catch (e) { opBox(`<div class="err">${esc(errCopy(e))}</div>`); state.busy = false; }
+  };
+}
+
+
+/* ---------------- restore current from last-read or a NAS backup ---------------- */
+async function restorePicker(){
+  let backups = [];
+  try { backups = (await api("codeplug_list", { include_backups: true })).backups || []; } catch {}
+  const opts = backups.map(b => `<option value="${esc(b.path)}">${new Date(b.mtime * 1000).toLocaleString(LOCALE)} — ${esc(b.name.replace(/^D878UVII_\d{8}-\d{6}_?/, "") || "read")}${b.fm ? " · FM" : ""}</option>`).join("");
+  drawer(t("Επαναφορά του «current»"), `<div class="form">
+      <label class="full"><input type="radio" name="rs" value="last-read" checked> ${t("Από το τελευταίο read (ό,τι έχει τώρα ο ασύρματος)")}</label>
+      <label class="full"><input type="radio" name="rs" value="backup"> ${t("Από backup στο NAS:")}
+        <select id="rs-backup" style="width:100%">${opts || `<option value="">${t("(κανένα backup)")}</option>`}</select></label>
+      <div class="note">${t("Χάνονται οι αλλαγές του editor στο current. Ο ασύρματος δεν αλλάζει μέχρι να πατήσεις Write.")}</div></div>`,
+    `<button id="rs-ok" class="primary">${t("Επαναφορά")}</button>`);
+  $("rs-ok").onclick = async () => {
+    const mode = document.querySelector('input[name="rs"]:checked').value;
+    const source = mode === "backup" ? $("rs-backup").value : "last-read";
+    if (!source) return;
+    try { await api("codeplug_copy", { source, target: "current", overwrite: true }); closeDrawer(); state.codeplug = "current"; fmState.listFor = null; refreshList(); toast(t("Επαναφέρθηκε.")); }
+    catch (e) { drMsg(errCopy(e), true); }
+  };
+}
+
+
+/* ---------------- repeaters tab ---------------- */
+const rptState = { country: "Greece", region: "", band: "any", results: [], errors: [], attribution: null, searched: false, live: null };
+function rpLive(r){
+  if (!rptState.live) return "";
+  const L = rptState.live[r.locator];
+  if (!L || !L.last_seen) return `<span class="live none" title="${t("Δεν βρέθηκε στο BrandMeister")}">—</span>`;
+  const d = new Date(L.last_seen.replace(" ", "T") + "Z"); const days = (Date.now() - d) / 86400000;
+  const cls = days < 60 ? "ok" : days < 365 ? "mid" : "old";
+  return `<span class="live ${cls}" title="${esc(L.last_seen)} UTC">${d.toLocaleDateString(LOCALE, { year: "2-digit", month: "2-digit" })}</span>`;
+}
+async function renderRpt(){
+  const R = rptState.results;
+  const have = new Set(state.cp.channels.map(c => `${parseFloat(c.rxFrequency)}|${parseFloat(c.txFrequency)}`));
+  $("cp-body").innerHTML = `
+    <div class="row" style="margin-bottom:6px"><b>${t("Αναμεταδότες")}</b><span class="grow"></span>
+      <input type="text" id="rp-country" value="${esc(rptState.country)}" style="width:8em" title="${t("Χώρα (αγγλικά, π.χ. Greece)")}">
+      <input type="text" id="rp-region" value="${esc(rptState.region)}" placeholder="${t("περιοχή / πόλη (προαιρετικό)")}" style="width:12em">
+      <select id="rp-band"><option value="any" ${rptState.band === "any" ? "selected" : ""}>VHF+UHF</option><option value="2m" ${rptState.band === "2m" ? "selected" : ""}>2 m</option><option value="70cm" ${rptState.band === "70cm" ? "selected" : ""}>70 cm</option></select>
+      <button class="small primary" id="rp-search">${t("Αναζήτηση")}</button></div>
+    ${rptState.errors.length ? `<div class="note">${esc(rptState.errors.join(" · ").replace(/\n.*$/s, ""))}</div>` : ""}
+    ${R.length ? `<div class="tablewrap" style="max-height:480px;overflow:auto"><table><thead><tr><th><input type="checkbox" id="rp-all"></th><th>${t("Διακριτικό")}</th><th>${t("Πόλη")}</th><th>RX</th><th>TX</th><th>CC</th><th>${t("Δίκτυο")}</th><th title="${t("Τελευταία φορά στο BrandMeister")}">BM</th></tr></thead><tbody>
+      ${R.map((r, i) => { const dup = have.has(`${r.rx_mhz}|${r.tx_mhz}`); const modes = (r.modes || [r.mode]).filter(Boolean).join("/"); const net = r.network || (r.ctcss ? "FM " + r.ctcss : modes); return `<tr class="${dup ? "note" : ""}"><td><input type="checkbox" class="rp-sel" data-i="${i}" ${dup ? "disabled title=\"" + t("υπάρχει ήδη") + "\"" : ""}></td><td class="call">${flag(r.callsign)}${esc(r.callsign || "")}</td><td>${esc(r.city || "")}${r.distance_km != null ? ` <span class="note">${r.distance_km} km</span>` : ""}</td><td class="num">${esc(fmtF(r.rx_mhz))}</td><td class="num">${esc(fmtF(r.tx_mhz))}</td><td class="num">${esc(r.color_code ?? "")}</td><td class="note">${esc(net)}</td><td>${rpLive(r)}</td></tr>`; }).join("")}
+      </tbody></table></div>
+      <div class="row" style="margin-top:6px"><button class="small primary" id="rp-add" disabled>+ ${t("Προσθήκη επιλεγμένων στο codeplug")}</button><button class="small" id="rp-live">${t("Έλεγχος ζωντάνιας (BM)")}</button><span class="note" id="rp-n"></span><span class="grow"></span>${rptState.attribution ? `<span class="note">${esc(rptState.attribution.text)} <a href="${esc(rptState.attribution.url)}" target="_blank" rel="noopener">RepeaterBook</a></span>` : `<span class="note">${t("Πηγή:")} RadioID.net</span>`}</div>
+      ${rptState.live ? `<div class="note" style="margin-top:4px">${t("BM last seen: πράσινο = < 2 μήνες, πορτοκαλί = < 1 χρόνος, γκρι = παλιότερα/ποτέ. Προσοχή: ένας DMR+ αναμεταδότης μπορεί να ζει εκεί χωρίς να φαίνεται στο BM.")}</div>` : ""}`
+      : `<div class="note">${rptState.searched ? t("Δεν βρέθηκαν αναμεταδότες.") : t("Χώρα και προαιρετικά περιοχή → Αναζήτηση. DMR από το RadioID.net· αναλογικοί (FM) μόλις εγκριθεί το RepeaterBook.")}</div>`}`;
+  $("rp-search").onclick = async () => {
+    rptState.country = $("rp-country").value.trim(); rptState.region = $("rp-region").value.trim(); rptState.band = $("rp-band").value;
+    $("rp-search").disabled = true;
+    try { const r = await api("repeaters_search", { country: rptState.country, region: rptState.region, band: rptState.band, limit: 200 }); rptState.results = r.repeaters || []; rptState.errors = (r.errors || []).filter(e => !/401/.test(e)); rptState.attribution = r.attribution; rptState.searched = true; rptState.live = null; }
+    catch (e) { toast(errCopy(e), 6000); }
+    renderRpt();
+  };
+  if (!R.length) return;
+  $("rp-live").onclick = async () => {
+    const ids = [...new Set(R.map(r => r.locator).filter(x => x && /^\d{6,}$/.test(String(x))))];
+    if (!ids.length) { toast(t("Κανένα BM ID για έλεγχο")); return; }
+    $("rp-live").disabled = true; $("rp-live").textContent = t("Ελέγχω…");
+    try { const r = await api("repeaters_liveness", { locators: ids }); rptState.live = r.liveness || {}; }
+    catch (e) { toast(errCopy(e), 6000); }
+    renderRpt();
+  };
+  const selN = () => { const n = $("cp-body").querySelectorAll(".rp-sel:checked").length; $("rp-add").disabled = !n; $("rp-n").textContent = n ? `${n} ${t("επιλεγμένα")}` : ""; };
+  $("cp-body").querySelectorAll(".rp-sel").forEach(c => c.onchange = selN);
+  $("rp-all").onchange = (e) => { $("cp-body").querySelectorAll(".rp-sel:not(:disabled)").forEach(c => c.checked = e.target.checked); selN(); };
+  $("rp-add").onclick = () => {
+    const sel = [...$("cp-body").querySelectorAll(".rp-sel:checked")].map(c => R[+c.dataset.i]);
+    const zoneDefault = (rptState.region || rptState.country).slice(0, 12) + " DMR";
+    drawer(t("Προσθήκη αναμεταδοτών"), `<div class="form">
+        <label class="full">${t("Zone")}<input type="text" id="rp-zone" value="${esc(zoneDefault)}" maxlength="16"></label>
+        <label class="full">${t("Talkgroups (TG:TS, χωρισμένα με κόμμα)")}<input type="text" id="rp-tgs" value="202:2, 9:2" placeholder="202:2, 9:2"></label>
+        <label><input type="checkbox" id="rp-roam" checked> ${t("Roaming zone")}</label>
+        <label><input type="checkbox" id="rp-fm" checked> ${t("Και FM κανάλι όπου υπάρχει")}</label>
+        <div class="note">${sel.length} ${t("αναμεταδότες")} × ${t("TG")} → ${t("κανάλια «<διακριτικό> <TG>», μία zone, μία roaming zone. Τα κανάλια γράφονται στον ασύρματο με Write.")}</div></div>`,
+      `<button id="rp-go" class="primary">${t("Προσθήκη")}</button>`);
+    $("rp-go").onclick = async () => {
+      const tgs = $("rp-tgs").value.split(",").map(x => x.trim()).filter(Boolean).map(x => { const [tg, ts] = x.split(":"); return { tg: +tg, ts: +(ts || 2) }; }).filter(x => x.tg > 0);
+      if (!tgs.length) { drMsg(t("Δώσε τουλάχιστον ένα TG"), true); return; }
+      $("rp-go").disabled = true;
+      try {
+        const r = await api("codeplug_import_region", { codeplug: state.codeplug, zone: $("rp-zone").value.trim() || zoneDefault, country: rptState.country, repeaters: sel, talkgroups: tgs, roaming: $("rp-roam").checked, include_fm: $("rp-fm").checked, max_repeaters: 200 });
+        closeDrawer(); toast(`«${$("rp-zone").value.trim() || zoneDefault}»: ${r.channels || 0} ${t("κανάλια")}${r.reused ? ` (${r.created} ${t("νέα")})` : ""}${r.roaming_zones && r.roaming_zones.length ? " + roaming" : ""}`); await reloadCodeplug(); state.tab = "zones"; state.zone = null; renderCodeplug();
+      } catch (e) { drMsg(errCopy(e), true); $("rp-go").disabled = false; }
+    };
+  };
+}
+
+/* ---------------- presets (special categories) tab ---------------- */
+const presetState = { list: null };
+async function renderPresets(){
+  if (!presetState.list) { try { presetState.list = (await api("presets_list")).presets; } catch (e) { $("cp-body").innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; return; } }
+  $("cp-body").innerHTML = `
+    <div class="note" style="margin-bottom:8px">${t("Έτοιμες ομάδες καναλιών με διεθνείς συχνότητες. Προστίθενται ως κανάλια FM σε δική τους zone· όσα υπάρχουν ήδη παραλείπονται. Γράφονται στον ασύρματο με Write.")}</div>
+    <div class="modules">${presetState.list.map(p => `
+      <section class="module" style="padding:12px 14px;gap:6px">
+        <header><h2 style="font-size:15px">${esc(p.label)}</h2><span class="note">${esc(p.region)}</span></header>
+        <div class="note">${p.count} ${t("κανάλια")}</div>
+        <div class="row"><button class="small primary" data-preset="${esc(p.id)}">+ ${t("Προσθήκη")}</button></div>
+      </section>`).join("")}</div>`;
+  $("cp-body").querySelectorAll("[data-preset]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const r = await api("codeplug_add_preset", { codeplug: state.codeplug, preset: b.dataset.preset });
+      toast(`«${r.zone}»: ${r.channels} ${t("κανάλια")}${r.reused ? ` (${r.created} ${t("νέα")}, ${r.reused} ${t("υπήρχαν")})` : ""}`);
+      await reloadCodeplug(); state.tab = "zones"; state.zone = null; renderCodeplug();
+    } catch (e) { toast(errCopy(e), 6000); b.disabled = false; }
+  });
+}
+
+/* ---------------- drawer helpers ---------------- */
+function drawer(title, bodyHtml, actionsHtml){
+  $("drawer-root").innerHTML = `<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-label="${esc(title)}"><div class="row"><h3 class="grow">${esc(title)}</h3><button class="small" id="dr-close">✕</button></div><div id="dr-body">${bodyHtml}</div><div class="row end" id="dr-actions">${actionsHtml}</div><div id="dr-msg" class="note"></div></aside>`;
+  $("scrim").onclick = closeDrawer; $("dr-close").onclick = closeDrawer;
+  const first = $("dr-body").querySelector("input,select"); first && first.focus();
+}
+function closeDrawer(){ $("drawer-root").innerHTML = ""; }
+function drMsg(t, bad){ const m = $("dr-msg"); if (m) { m.textContent = t; m.style.color = bad ? "var(--bad)" : "var(--muted)"; } }
+function prompt1(title, label, value, onOk){
+  drawer(title, `<div class="form"><label class="full">${esc(label)}<input type="text" id="p1" value="${esc(value)}" maxlength="16"></label></div>`, `<button id="p1-ok" class="primary">OK</button>`);
+  const go = async () => { const v = $("p1").value.trim(); if (!v) return; try { await onOk(v); closeDrawer(); } catch (e) { drMsg(errCopy(e), true); } };
+  $("p1-ok").onclick = go; $("p1").onkeydown = (e) => { if (e.key === "Enter") go(); };
+}
+function confirmBox(text, onOk){
+  drawer(t("Επιβεβαίωση"), `<p>${esc(text)}</p>`, `<button id="cb-ok" class="danger">${t("Ναι")}</button><button id="cb-no">${t("Άκυρο")}</button>`);
+  $("cb-no").onclick = closeDrawer; $("cb-ok").onclick = async () => { try { await onOk(); closeDrawer(); } catch (e) { drMsg(errCopy(e), true); } };
+}
+function pickChannels(exclude, onOk){
+  const ex = new Set(exclude || []);
+  const opts = state.cp.channels.filter(c => !ex.has(c.id));
+  drawer(t("Προσθήκη καναλιών"), `<input type="text" id="pk-f" placeholder="${t("Αναζήτηση")}" style="width:100%"><div class="list" id="pk-list" style="max-height:60vh"></div>`, `<button id="pk-ok" class="primary">${t("Προσθήκη")}</button>`);
+  const render = () => { const q = $("pk-f").value.toLowerCase(); $("pk-list").innerHTML = opts.filter(c => !q || c.name.toLowerCase().includes(q)).slice(0, 300).map(c => `<label><input type="checkbox" value="${esc(c.id)}"> ${esc(c.name)} <span class="note mono">${esc(fmtF(c.rxFrequency))}</span></label>`).join(""); };
+  render(); $("pk-f").oninput = render;
+  $("pk-ok").onclick = async () => { const ids = [...$("pk-list").querySelectorAll("input:checked")].map(i => i.value); if (!ids.length) return; try { await onOk(ids); closeDrawer(); } catch (e) { drMsg(errCopy(e), true); } };
+}
+async function edit(tool, input){
+  const r = await api(tool, input);
+  await reloadCodeplug();
+  return r;
+}
+const sel = (id, opts, cur, allowNone) => `<select id="${id}">${allowNone ? `<option value="">—</option>` : ""}${opts.map(o => `<option value="${esc(o.v)}" ${String(o.v) === String(cur ?? "") ? "selected" : ""}>${esc(o.t)}</option>`).join("")}</select>`;
+const POWER = ["", "Min", "Low", "Mid", "High", "Max"];
+
+/* ---------------- channel editor ---------------- */
+async function openChannel(chId, zoneId){
+  let c = { kind: "dmr", name: "", rxFrequency: "", txFrequency: "", colorCode: 1, timeSlot: "TS1", power: "" };
+  if (chId) {
+    const r = await api("codeplug_get", { codeplug: state.codeplug, section: "channels", ids: [chId], full: true });
+    c = r.entries[0]; if (!c) return;
+  }
+  const isNew = !chId;
+  const dmr = c.kind === "dmr";
+  const toneVal = (t) => t && typeof t === "object" ? (t.ctcss ? String(t.ctcss).replace(" Hz", "") : (t.dcs != null ? "D" + t.dcs : "")) : "";
+  const body = `
+    <div class="form">
+      <label class="full">${t("Όνομα (έως 16)")}<input type="text" id="f-name" value="${esc(c.name)}" maxlength="16"></label>
+      <label>${t("Τύπος")}${sel("f-kind", [{v:"dmr",t:"DMR"},{v:"fm",t:t("FM (αναλογικό)")}], c.kind)}</label>
+      <label>${t("Ισχύς")}${sel("f-power", POWER.map(p => ({v:p, t:p || t("προεπιλογή")})), c.power && c.power !== "!default" ? c.power : "")}</label>
+      <label>RX (MHz)<input type="number" id="f-rx" step="0.000125" value="${esc(numF(c.rxFrequency) ?? "")}"></label>
+      <label>TX (MHz)<input type="number" id="f-tx" step="0.000125" value="${esc(numF(c.txFrequency) ?? "")}"></label>
+      <div id="f-dmr" class="form full" style="grid-column:1/-1;display:${dmr ? "grid" : "none"}">
+        <label>Color code<input type="number" id="f-cc" min="0" max="15" value="${esc(c.colorCode ?? 1)}"></label>
+        <label>Time slot${sel("f-ts", [{v:"TS1",t:"TS1"},{v:"TS2",t:"TS2"}], c.timeSlot || "TS1")}</label>
+        <label class="full">TX contact / talkgroup${sel("f-contact", state.cp.contacts.map(x => ({v:x.id, t:`${x.number} · ${x.name}`})), c.contact, true)}</label>
+        <label class="full">RX group list${sel("f-gl", state.cp.groupLists.map(g => ({v:g.id, t:g.name})), c.groupList, true)}</label>
+        <label>Admit${sel("f-admit", [{v:"Always",t:"Always"},{v:"Free",t:"Channel free"},{v:"ColorCode",t:"Color code"}], c.admit || "ColorCode")}</label>
+      </div>
+      <div id="f-fm" class="form full" style="grid-column:1/-1;display:${dmr ? "none" : "grid"}">
+        <label>Bandwidth${sel("f-bw", [{v:"Narrow",t:"Narrow 12.5"},{v:"Wide",t:"Wide 25"}], c.bandwidth || "Wide")}</label>
+        <label>Admit${sel("f-admit-fm", [{v:"Always",t:"Always"},{v:"Free",t:"Channel free"},{v:"Tone",t:"Tone"}], c.admit || "Always")}</label>
+        <label>${t("TX tone (CTCSS Hz ή Dnnn)")}<input type="text" id="f-txtone" value="${esc(toneVal(c.txTone))}" placeholder="${t("88.5 ή D023")}"></label>
+        <label>RX tone<input type="text" id="f-rxtone" value="${esc(toneVal(c.rxTone))}" placeholder="${t("κενό = χωρίς")}"></label>
+      </div>
+      <label class="full">Scan list${sel("f-scan", state.cp.scanLists.map(s => ({v:s.id, t:s.name})), c.scanList, true)}</label>
+      <label class="check full"><input type="checkbox" id="f-rxonly" ${c.rxOnly ? "checked" : ""}> ${t("Μόνο λήψη (RX only)")}</label>
+      ${!isNew ? `<div class="full note">Zones: ${esc(zonesOf(chId).join(", ") || t("καμία"))} · id ${esc(chId)}</div>` : ""}
+    </div>`;
+  drawer(isNew ? t("Νέο κανάλι") : t("Κανάλι"), body, `${!isNew ? `<button id="f-del" class="danger">${t("Διαγραφή")}</button>` : ""}<span class="grow"></span><button id="f-save" class="primary">${t("Αποθήκευση")}</button>`);
+  $("f-kind").onchange = () => { const d = $("f-kind").value === "dmr"; $("f-dmr").style.display = d ? "grid" : "none"; $("f-fm").style.display = d ? "none" : "grid"; };
+  $("f-rx").onchange = () => { if (!$("f-tx").value) $("f-tx").value = $("f-rx").value; };
+  const parseTone = (s) => { s = (s || "").trim(); if (!s) return null; if (/^d/i.test(s)) { const n = parseInt(s.slice(1), 10); return Number.isFinite(n) ? { dcs: n } : null; } const f = parseFloat(s); return Number.isFinite(f) ? { ctcss: f.toFixed(1) + " Hz" } : null; };
+  $("f-save").onclick = async () => {
+    const kind = $("f-kind").value, name = $("f-name").value.trim();
+    const rx = parseFloat($("f-rx").value), tx = parseFloat($("f-tx").value || $("f-rx").value);
+    if (!name || !Number.isFinite(rx) || !Number.isFinite(tx)) { drMsg(t("Χρειάζεται όνομα, RX και TX."), true); return; }
+    const entry = { name, rxFrequency: rx, txFrequency: tx, rxOnly: $("f-rxonly").checked, power: $("f-power").value || null, scanList: $("f-scan").value || null };
+    if (kind === "dmr") Object.assign(entry, { colorCode: parseInt($("f-cc").value, 10) || 0, timeSlot: $("f-ts").value, contact: $("f-contact").value || null, groupList: $("f-gl").value || null, admit: $("f-admit").value });
+    else Object.assign(entry, { bandwidth: $("f-bw").value, admit: $("f-admit-fm").value, txTone: parseTone($("f-txtone").value), rxTone: parseTone($("f-rxtone").value) });
+    if (!isNew && kind !== c.kind) { drMsg(t("Η αλλαγή τύπου DMR↔FM δεν υποστηρίζεται σε υπάρχον κανάλι. Φτιάξε νέο."), true); return; }
+    if (!isNew) entry.id = chId;
+    try {
+      drMsg(t("Αποθηκεύω…"));
+      const r = await api("codeplug_upsert", { codeplug: state.codeplug, section: "channels", entry, kind });
+      if (isNew && zoneId) await api("codeplug_zone_set", { codeplug: state.codeplug, zone: zoneId, channels: [r.id], mode: "append" });
+      closeDrawer(); toast(isNew ? t("Το κανάλι δημιουργήθηκε.") : t("Αποθηκεύτηκε.")); reloadCodeplug();
+    } catch (e) { drMsg(errCopy(e), true); }
+  };
+  if (!isNew) $("f-del").onclick = () => confirmBox(`${t("Διαγραφή του καναλιού «")}${c.name}${t("» από το codeplug και από όλες τις zones;")}`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "channels", ids: [chId] }).then(() => toast(t("Διαγράφηκε."))));
+}
+
+/* ---------------- contact editor ---------------- */
+function openContact(ctId){
+  const c = ctId ? state.cp.ctById[ctId] : { name: "", number: "", type: "GroupCall" };
+  const isNew = !ctId;
+  drawer(isNew ? t("Νέα επαφή / talkgroup") : t("Επαφή"), `<div class="form">
+      <label class="full">${t("Όνομα (έως 16)")}<input type="text" id="c-name" value="${esc(c.name)}" maxlength="16"></label>
+      <label>${t("Αριθμός")}<input type="number" id="c-num" min="1" value="${esc(c.number ?? "")}"></label>
+      <label>${t("Τύπος")}${sel("c-type", [{v:"GroupCall",t:"Group call (TG)"},{v:"PrivateCall",t:"Private call"},{v:"AllCall",t:"All call"}], c.type || "GroupCall")}</label>
+      <label class="check full"><input type="checkbox" id="c-ring" ${c.ring ? "checked" : ""}> ${t("Ήχος κλήσης (ring)")}</label>
+    </div>`, `${!isNew ? `<button id="c-del" class="danger">${t("Διαγραφή")}</button>` : ""}<span class="grow"></span><button id="c-save" class="primary">${t("Αποθήκευση")}</button>`);
+  $("c-save").onclick = async () => {
+    const entry = { name: $("c-name").value.trim(), number: parseInt($("c-num").value, 10), type: $("c-type").value, ring: $("c-ring").checked };
+    if (!entry.name || !Number.isFinite(entry.number)) { drMsg(t("Χρειάζεται όνομα και αριθμός."), true); return; }
+    if (!isNew) entry.id = ctId;
+    try { await api("codeplug_upsert", { codeplug: state.codeplug, section: "contacts", entry, kind: "dmr" }); closeDrawer(); toast(t("Αποθηκεύτηκε.")); reloadCodeplug(); } catch (e) { drMsg(errCopy(e), true); }
+  };
+  if (!isNew) $("c-del").onclick = () => confirmBox(`${t("Διαγραφή της επαφής «")}${c.name}${t("»; Θα αφαιρεθεί από κανάλια και group lists.")}`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "contacts", ids: [ctId] }));
+}
+
+/* ---------------- group list editor ---------------- */
+function openGroupList(glId){
+  const g = glId ? state.cp.glById[glId] : { name: "", contacts: [] };
+  const isNew = !glId;
+  const members = new Set(g.contacts || []);
+  const tgs = state.cp.contacts.filter(c => (c.type || "GroupCall") === "GroupCall" || members.has(c.id));
+  drawer(isNew ? t("Νέα RX group list") : "RX group list", `<div class="form">
+      <label class="full">${t("Όνομα (έως 16)")}<input type="text" id="g-name" value="${esc(g.name)}" maxlength="16"></label>
+      <label class="full">${t("Μέλη")}<input type="text" id="g-f" placeholder="${t("Αναζήτηση TG")}"></label>
+    </div><div class="list" id="g-list" style="max-height:50vh"></div>`,
+    `${!isNew ? `<button id="g-del" class="danger">${t("Διαγραφή")}</button>` : ""}<span class="grow"></span><button id="g-save" class="primary">${t("Αποθήκευση")}</button>`);
+  const chosen = new Set(members);
+  const render = () => { const q = $("g-f").value.toLowerCase(); $("g-list").innerHTML = tgs.filter(c => !q || String(c.name).toLowerCase().includes(q) || String(c.number).includes(q)).slice(0, 300).map(c => `<label><input type="checkbox" value="${esc(c.id)}" ${chosen.has(c.id) ? "checked" : ""}> <span class="mono">${esc(c.number)}</span> ${esc(c.name)}</label>`).join(""); $("g-list").querySelectorAll("input").forEach(i => i.onchange = () => { i.checked ? chosen.add(i.value) : chosen.delete(i.value); }); };
+  render(); $("g-f").oninput = render;
+  $("g-save").onclick = async () => {
+    const name = $("g-name").value.trim(); if (!name) { drMsg(t("Χρειάζεται όνομα."), true); return; }
+    const entry = { name, contacts: [...chosen] }; if (!isNew) entry.id = glId;
+    try { await api("codeplug_upsert", { codeplug: state.codeplug, section: "groupLists", entry }); closeDrawer(); toast(t("Αποθηκεύτηκε.")); reloadCodeplug(); } catch (e) { drMsg(errCopy(e), true); }
+  };
+  if (!isNew) $("g-del").onclick = () => confirmBox(`${t("Διαγραφή της group list «")}${g.name}»;`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "groupLists", ids: [glId] }));
+}
+
+/* ---------------- scan list editor ---------------- */
+function openScanList(slId){
+  const s = slId ? state.cp.scanLists.find(x => x.id === slId) : { name: "", channels: [] };
+  const isNew = !slId;
+  const chosen = new Set(s.channels || []);
+  drawer(isNew ? t("Νέα scan list") : "Scan list", `<div class="form">
+      <label class="full">${t("Όνομα (έως 16)")}<input type="text" id="s-name" value="${esc(s.name)}" maxlength="16"></label>
+      <label class="full">${t("Κανάλια")}<input type="text" id="s-f" placeholder="${t("Αναζήτηση καναλιού")}"></label>
+    </div><div class="list" id="s-list" style="max-height:50vh"></div>`,
+    `${!isNew ? `<button id="s-del" class="danger">${t("Διαγραφή")}</button>` : ""}<span class="grow"></span><button id="s-save" class="primary">${t("Αποθήκευση")}</button>`);
+  const render = () => { const q = $("s-f").value.toLowerCase(); const list = state.cp.channels.filter(c => chosen.has(c.id) || !q || c.name.toLowerCase().includes(q)); $("s-list").innerHTML = list.slice(0, 300).map(c => `<label><input type="checkbox" value="${esc(c.id)}" ${chosen.has(c.id) ? "checked" : ""}> ${esc(c.name)} <span class="note mono">${esc(fmtF(c.rxFrequency))}</span></label>`).join(""); $("s-list").querySelectorAll("input").forEach(i => i.onchange = () => { i.checked ? chosen.add(i.value) : chosen.delete(i.value); }); };
+  render(); $("s-f").oninput = render;
+  $("s-save").onclick = async () => {
+    const name = $("s-name").value.trim(); if (!name) { drMsg(t("Χρειάζεται όνομα."), true); return; }
+    const entry = { name, channels: [...chosen] }; if (!isNew) entry.id = slId;
+    try { await api("codeplug_upsert", { codeplug: state.codeplug, section: "scanLists", entry }); closeDrawer(); toast(t("Αποθηκεύτηκε.")); reloadCodeplug(); } catch (e) { drMsg(errCopy(e), true); }
+  };
+  if (!isNew) $("s-del").onclick = () => confirmBox(`${t("Διαγραφή της scan list «")}${s.name}»;`, () => edit("codeplug_delete", { codeplug: state.codeplug, section: "scanLists", ids: [slId] }));
+}
+
+/* ---------------- radio operations ---------------- */
+function opBox(html){ const b = $("radio-op"); b.hidden = false; b.innerHTML = html; }
+function fmtDiff(d){ return (d || "").split("\n").map(l => { const c = l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : ""; return `<span class="${c}">${esc(l)}</span>`; }).join("\n"); }
+async function radioRead(){
+  if (state.busy) return; state.busy = true;
+  opBox(`<div class="confirm"><b>${t("Διαβάζω τον ασύρματο…")}</b><div class="progress"><i></i></div><div class="note" id="op-msg">${t("Μην αποσυνδέσεις τον ασύρματο. Παίρνει 1–3 λεπτά.")}</div></div>`);
+  try {
+    if (!(await radioPresent())) throw { message: NO_RADIO };
+    const r = await job("radio_read", { label: "shack" }, (s) => { $("op-msg").textContent = `${Math.round(s.elapsed || 0)} s…`; });
+    if (!r.ok) throw { message: (r.read_output || "").split("\n").slice(-3).join(" ") };
+    opBox(`<div class="okbox">${t("Διαβάστηκε. Backup στο NAS:")} <span class="mono">${esc(r.yaml)}</span>${t(". Στο workspace ως")} <b>last-read</b>${r.fm_stations !== undefined ? ` · FM: ${r.fm_stations} ${t("μνήμες")}` : ""}.
+      <div class="row" style="margin-top:6px"><button class="small primary" id="op-use">${t("Άνοιγμα ως current (αντικατάσταση)")}</button><button class="small" id="op-close">${t("Κλείσιμο")}</button></div></div>`);
+    $("op-close").onclick = () => { $("radio-op").hidden = true; };
+    $("op-use").onclick = async () => { await api("codeplug_copy", { source: "last-read", target: "current", overwrite: true }); state.codeplug = "current"; $("radio-op").hidden = true; refreshList(); };
+    refreshList();
+  } catch (e) { opBox(`<div class="err">${t("Το read απέτυχε:")} ${esc(errCopy(e))}</div>`); }
+  finally { state.busy = false; }
+}
+async function radioWrite(){
+  if (state.busy) return; state.busy = true;
+  opBox(`<div class="confirm"><b>${t("Προετοιμασία εγγραφής…")}</b><div class="progress"><i></i></div><div class="note">${t("Έλεγχος εγκυρότητας και σύγκριση με το τελευταίο read.")}</div></div>`);
+  try {
+    const p = await job("radio_write", { codeplug: state.codeplug });
+    if (!p.confirm_token) throw { message: t("Ο έλεγχος απέτυχε: ") + ((p.validation || {}).messages || "") };
+    const d = p.diff_vs_last_read || "";
+    const adds = (d.match(/^\+(?!\+)/gm) || []).length, dels = (d.match(/^-(?!-)/gm) || []).length;
+    opBox(`<div class="confirm">
+      <div><b>${t("Εγγραφή του «")}${esc(state.codeplug)}${t("» στον ασύρματο")}</b> ${t("· έλεγχος dmrconf")} ${p.validation.ok ? "OK" : t("ΑΠΕΤΥΧΕ")} · ${adds} ${t("προσθήκες,")} ${dels} ${t("αφαιρέσεις σε σχέση με το τελευταίο read")}${p.diff_truncated ? t(" (το diff είναι κομμένο)") : ""}</div>
+      <pre class="diff">${fmtDiff(d) || t("(χωρίς διαφορές)")}</pre>
+      <div class="note">${t("Πριν τη γραφή παίρνεται αυτόματα νέο backup από τον ασύρματο. Μην αποσυνδέσεις τον ασύρματο μέχρι το τέλος (1–6 λεπτά).")}</div>
+      <div class="row"><button class="tx" id="op-go">${t("Γράψε στον ασύρματο")}</button><button id="op-cancel">${t("Άκυρο")}</button></div></div>`);
+    $("op-cancel").onclick = () => { $("radio-op").hidden = true; state.busy = false; };
+    $("op-go").onclick = async () => {
+      $("op-go").disabled = true; $("op-cancel").disabled = true;
+      opBox(`<div class="confirm"><b>${t("Γράφω στον ασύρματο…")}</b><div class="progress"><i></i></div><div class="note" id="op-msg">${t("Backup, επανεκκίνηση του ασυρμάτου, και μετά εγγραφή. Μην αγγίξεις τον ασύρματο.")}</div></div>`);
+      try {
+        if (!(await radioPresent())) throw { message: NO_RADIO };
+        const r = await job("radio_write", { codeplug: state.codeplug, confirm_token: p.confirm_token }, (s) => { $("op-msg").textContent = `${Math.round(s.elapsed || 0)} s…` + (bridge.wanted && !bridge.up ? t(" (ο ασύρματος επανεκκινεί, περιμένω)") : ""); });
+        if (!r.ok) throw { message: (r.output || r.error || "").split("\n").slice(-3).join(" "), nothingWritten: /nothing was written/.test(r.error || "") };
+        const rl = r.relay || {};
+        const stats = rl.writes !== undefined ? `<div class="note">${rl.writes} blocks${rl.skipped ? ` · ${rl.skipped} ${t("ίδια παραλείφθηκαν")}` : ""}${rl.retries ? ` · ${rl.retries} retries` : ""}${rl.seconds ? ` · ${rl.seconds} s` : ""}${r.fm ? ` · FM: ${r.fm.stations} ${t("μνήμες")}${r.fm.failed && r.fm.failed.length ? " ✗" : " ✓"}` : ""}</div>` : "";
+        opBox(`<div class="okbox">${t("Η εγγραφή ολοκληρώθηκε. Backup πριν τη γραφή:")} <span class="mono">${esc(r.safety_backup || "")}</span>${t(". Ο ασύρματος θα κάνει επανεκκίνηση.")}${stats}<div class="row" style="margin-top:6px"><button class="small" id="op-close">${t("Κλείσιμο")}</button></div></div>`);
+        $("op-close").onclick = () => { $("radio-op").hidden = true; };
+        await api("codeplug_copy", { source: state.codeplug, target: "last-read", overwrite: true }).catch(() => {});
+      } catch (e) { opBox(`<div class="err">${t("Η εγγραφή απέτυχε:")} ${esc(errCopy(e))}. ${e && e.nothingWritten ? t("Δεν γράφτηκε τίποτα στον ασύρματο.") : t("Ο ασύρματος μπορεί να έχει μισή εγγραφή: ξαναγράψε ή επανέφερε από το backup.")}</div>`); }
+      finally { state.busy = false; }
+    };
+    return; // busy stays until go/cancel
+  } catch (e) { opBox(`<div class="err">${esc(errCopy(e))}</div>`); state.busy = false; }
+}
+async function contactsWrite(){
+  if (state.busy) return; state.busy = true;
+  const lastC = (() => { try { return localStorage.getItem("stentor.contacts") || "Greece"; } catch { return "Greece"; } })();
+  opBox(`<div class="confirm"><div><b>${t("Digital Contacts (RadioID) στον ασύρματο")}</b></div>
+    <div class="note">${t("Λίστα χρηστών DMR για να δείχνει ο ασύρματος διακριτικό/όνομα/πόλη του καλούντος. Αντικαθιστά τη λίστα που έχει ο ασύρματος.")}</div>
+    <div class="row"><label class="label" for="ct-c">${t("Χώρες")}</label><input type="text" id="ct-c" value="${esc(lastC)}" size="28" placeholder="Greece, Cyprus"><label class="check"><input type="checkbox" id="ct-all"> ${t("όλος ο κόσμος (~315k, αργό)")}</label></div>
+    <div class="row"><button class="primary" id="ct-prev">${t("Υπολογισμός")}</button><button id="ct-cancel">${t("Άκυρο")}</button></div></div>`);
+  $("ct-cancel").onclick = () => { $("radio-op").hidden = true; state.busy = false; };
+  $("ct-prev").onclick = async () => {
+    const all = $("ct-all").checked, countries = $("ct-c").value.split(",").map(x => x.trim()).filter(Boolean);
+    try { localStorage.setItem("stentor.contacts", countries.join(", ")); } catch {}
+    $("ct-prev").disabled = true; $("ct-prev").textContent = t("Υπολογίζω…");
+    try {
+      const p = await job("radio_write_callsign_db", { countries: all ? null : countries, all_users: all });
+      if (!p.confirm_token) throw { message: p.error || "no token" };
+      const per = Object.entries(p.per_country || {}).map(([k, v]) => `${esc(k)} ${v}`).join(", ");
+      opBox(`<div class="confirm"><div><b>${p.entries}</b> ${t("εγγραφές")} (${esc(per)})</div>
+        <div class="note">${t("Ο ασύρματος πρέπει να μείνει συνδεδεμένος· παίρνει 1–5 λεπτά και μετά κάνει επανεκκίνηση.")}</div>
+        <div class="row"><button class="tx" id="ct-go">${t("Γράψε στον ασύρματο")}</button><button id="ct-cancel2">${t("Άκυρο")}</button></div></div>`);
+      $("ct-cancel2").onclick = () => { $("radio-op").hidden = true; state.busy = false; };
+      $("ct-go").onclick = async () => {
+        $("ct-go").disabled = true; $("ct-cancel2").disabled = true;
+        opBox(`<div class="confirm"><b>${t("Γράφω τα Digital Contacts…")}</b><div class="progress"><i></i></div><div class="note" id="op-msg"></div></div>`);
+        try {
+          if (!(await radioPresent())) throw { message: NO_RADIO };
+          const r = await job("radio_write_callsign_db", { countries: all ? null : countries, all_users: all, confirm_token: p.confirm_token }, (s) => { $("op-msg").textContent = `${Math.round(s.elapsed || 0)} s…`; });
+          if (!r.ok) throw { message: (r.output || r.error || "").split("\n").slice(-3).join(" ") };
+          opBox(`<div class="okbox">${t("Τα Digital Contacts γράφτηκαν.")} ${p.entries} ${t("εγγραφές")}. ${t("Ο ασύρματος θα κάνει επανεκκίνηση.")} <button class="small" onclick="document.getElementById('radio-op').hidden=true">✕</button></div>`);
+        } catch (e) { opBox(`<div class="err">${t("Η εγγραφή των contacts απέτυχε:")} ${esc(errCopy(e))}</div>`); }
+        finally { state.busy = false; }
+      };
+    } catch (e) { opBox(`<div class="err">${esc(errCopy(e))}</div>`); state.busy = false; }
+  };
+}
+async function validate(){
+  opBox(`<div class="confirm">${t("Έλεγχος…")}</div>`);
+  try { const v = await api("codeplug_validate", { codeplug: state.codeplug }); opBox(`<div class="${v.ok ? "okbox" : "err"}">${v.ok ? t("Έγκυρο για τον ασύρματο") : t("Μη έγκυρο")} · ${esc(v.messages || t("χωρίς προειδοποιήσεις"))} <button class="small" onclick="document.getElementById('radio-op').hidden=true">✕</button></div>`); }
+  catch (e) { opBox(`<div class="err">${esc(errCopy(e))}</div>`); }
+}
+const RADIO_BTNS = ["btn-read", "btn-write", "btn-contacts", "fm-read", "fm-write"];
+function radioButtons(present){
+  state.radioPresent = present;
+  for (const id of RADIO_BTNS) {
+    const b = $(id); if (!b) continue;
+    if (id === "fm-write" && present && !(fmState.list || []).length) { b.disabled = true; continue; }
+    b.disabled = !present;
+    b.title = present ? (b.dataset.title || b.title) : (b.dataset.title = b.dataset.title || b.title, t("Σύνδεσε πρώτα τον ασύρματο (USB στον server ή «⚡ Σύνδεση»)"));
+  }
+}
+async function radioDetect(){
+  if (bridge.up) { radioButtons(true); return; }
+  try { const r = await api("radio_detect"); setPill("pill-radio", r.ok ? "ok" : "idle", r.ok ? (r.via_browser_bridge ? t("Ασύρματος: μέσω browser") : t("Ασύρματος στον server")) : t("Ασύρματος: μη συνδεδεμένος")); radioButtons(!!r.ok); }
+  catch { setPill("pill-radio", "bad", t("Ασύρματος: άγνωστο")); radioButtons(false); }
+}
+function refreshList(){ api("codeplug_list", { include_backups: false }).then(renderList).catch(e => { $("cp-body").innerHTML = `<div class="err">${esc(errCopy(e))}</div>`; }); }
+
+/* ---------------- browser serial bridge (Web Serial -> WebSocket -> pty on the server) ---------------- */
+const bridge = { port: null, ws: null, reader: null, writer: null, up: false, wanted: false, stats: { tx: 0, rx: 0 } };
+async function bridgeToggle(){
+  if (bridge.up || bridge.wanted) { bridge.wanted = false; await bridgeStop(t("κλείσιμο από τον χρήστη")); return; }
+  if (!("serial" in navigator)) { opBox(`<div class="err">${t("Ο browser δεν υποστηρίζει Web Serial. Χρειάζεται Chrome ή Edge σε υπολογιστή (όχι Firefox/Safari/κινητό).")}</div>`); return; }
+  let port;
+  try { port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x28e9 }] }); }
+  catch (e) { return; } // user cancelled the chooser
+  bridge.wanted = true;
+  await bridgeOpen(port, true);
+}
+// The radio reboots after every programming session (the port vanishes for ~10-20 s). While the user wants the
+// bridge, re-open the (already permitted) port as soon as it is back, so a write can follow its safety-backup read.
+async function bridgeReconnect(){
+  const t0 = Date.now();
+  toast(t("Ο ασύρματος επανεκκινεί — περιμένω να επανέλθει…"));
+  while (bridge.wanted && !bridge.up && Date.now() - t0 < 120000) {
+    await new Promise(r => setTimeout(r, 1500));
+    let ports = [];
+    try { ports = await navigator.serial.getPorts(); } catch {}
+    for (const p of ports) {
+      const info = p.getInfo ? p.getInfo() : {};
+      if (info.usbVendorId && info.usbVendorId !== 0x28e9) continue;
+      if (await bridgeOpen(p, false)) { toast(t("Ο ασύρματος επανήλθε — γέφυρα ενεργή ξανά.")); return; }
+    }
+  }
+  if (bridge.wanted && !bridge.up) { bridge.wanted = false; toast(t("Ο ασύρματος δεν επανήλθε· πάτα ξανά «⚡ Σύνδεση».")); radioDetect(); }
+}
+async function bridgeOpen(port, announce){
+  try {
+    await port.open({ baudRate: 115200, bufferSize: 65536 });
+    bridge.port = port;
+    const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + location.pathname.replace(/\/$/, "") + "/ws/serial?shack=1";
+    const ws = new WebSocket(url); ws.binaryType = "arraybuffer";
+    bridge.ws = ws;
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("WebSocket")); ws.onclose = (e) => rej(new Error(t("WebSocket κλειστό ") + e.code)); });
+    bridge.writer = port.writable.getWriter();
+    bridge.up = true; radioButtons(true); bridge.stats = { tx: 0, rx: 0 };
+    ws.onmessage = async (e) => {
+      if (typeof e.data === "string") return;
+      const u8 = new Uint8Array(e.data); bridge.stats.tx += u8.length;
+      try { await bridge.writer.write(u8); } catch (err) { bridgeStop(t("σφάλμα εγγραφής στη θύρα")); }
+    };
+    ws.onclose = () => { if (bridge.up) bridgeStop(t("ο server έκλεισε τη σύνδεση")); };
+    (async () => {
+      // Web Serial reports recoverable errors (buffer overrun, framing, parity) by erroring the current readable
+      // stream; port.readable is then a fresh stream and reading can continue. Only a closed/unplugged port ends it.
+      while (bridge.up && bridge.port && bridge.port.readable) {
+        bridge.reader = bridge.port.readable.getReader();
+        try {
+          for (;;) { const { value, done } = await bridge.reader.read(); if (done) break; if (value && value.length) { bridge.stats.rx += value.length; if (ws.readyState === 1) ws.send(value); } }
+        } catch (err) {
+          bridge.stats.errors = (bridge.stats.errors || 0) + 1; console.warn("serial read error", err);
+          if (ws.readyState === 1) ws.send(JSON.stringify({ type: "read_error", name: err && err.name, message: String(err && err.message || err) }));
+        } finally { try { bridge.reader.releaseLock(); } catch {} }
+      }
+      if (bridge.up) bridgeStop(t("ο ασύρματος αποσυνδέθηκε"));
+    })();
+    port.addEventListener("disconnect", () => { if (bridge.up) bridgeStop(t("ο ασύρματος αποσυνδέθηκε")); });
+    $("btn-bridge").textContent = t("⚡ Αποσύνδεση"); $("btn-bridge").classList.add("primary");
+    setPill("pill-radio", "ok", t("Ασύρματος: μέσω browser"));
+    if (announce) opBox(`<div class="okbox">${t("Ο ασύρματος είναι συνδεδεμένος μέσα από αυτόν τον browser. Τα Read/Write περνούν τώρα από εδώ. Μετά από κάθε read/write ο ασύρματος κάνει επανεκκίνηση και η γέφυρα ξανασυνδέεται μόνη της. Μην κλείσεις την καρτέλα όσο γίνεται read ή write.")} <button class="small" onclick="document.getElementById('radio-op').hidden=true">✕</button></div>`);
+    return true;
+  } catch (e) {
+    await bridgeStop(null);
+    if (announce) opBox(`<div class="err">${t("Δεν άνοιξε η θύρα:")} ${esc(e && e.message || e)}${t(". Αν η θύρα είναι ανοιχτή στο CPS, κλείσ' το πρώτα.")}</div>`);
+    return false;
+  }
+}
+async function bridgeStop(reason){
+  const wasUp = bridge.up;
+  bridge.up = false; if (!bridge.wanted) radioDetect();
+  try { bridge.reader && await bridge.reader.cancel(); } catch {}
+  try { bridge.writer && bridge.writer.releaseLock(); } catch {}
+  try { bridge.ws && bridge.ws.close(); } catch {}
+  try { bridge.port && await bridge.port.close(); } catch {}
+  bridge.port = bridge.ws = bridge.reader = bridge.writer = null;
+  if (bridge.wanted && wasUp) { setPill("pill-radio", "warn", t("Ασύρματος: επανεκκίνηση…")); bridgeReconnect(); return; }
+  $("btn-bridge").textContent = t("⚡ Σύνδεση"); $("btn-bridge").classList.remove("primary");
+  if (reason) { toast(t("Γέφυρα ασυρμάτου: ") + reason); radioDetect(); }
+}
+async function radioPresent(){
+  if (bridge.up) return true;
+  if (bridge.wanted) { // reconnecting after a reboot: give it a moment
+    for (let i = 0; i < 40 && !bridge.up; i++) await new Promise(r => setTimeout(r, 1000));
+    return bridge.up;
+  }
+  try { const r = await api("radio_detect"); return !!r.ok; } catch { return false; }
+}
+const NO_RADIO = t("Δεν βλέπω ασύρματο στον server. Αν είναι συνδεδεμένος σε αυτόν τον υπολογιστή, πάτα πρώτα «⚡ Σύνδεση».");
+window.addEventListener("beforeunload", (e) => { if (bridge.up && state.busy) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------------- brand ---------------- */
+async function brand(){
+  try { const i = await api("server_info");
+    $("brand").childNodes[0].nodeValue = (i.callsign || "Stentor") + " "; $("brand-flag").innerHTML = flag(i.callsign);
+    $("brand-sub").textContent = `Stentor ${i.version} · ${i.radio_model}` + (i.dmr_id ? ` · DMR ID ${i.dmr_id}` : "") + (i.wpsd && !i.wpsd.endsWith("@") ? " · hotspot " + i.wpsd.split("@")[1] : "");
+  } catch {}
+}
+brand();
+
+/* ---------------- boot ---------------- */
+i18nDom();
+$("btn-lang").textContent = LANG === "en" ? "ΕΛ" : "EN";
+$("btn-lang").onclick = () => { try { localStorage.setItem("stentor.lang", LANG === "en" ? "el" : "en"); } catch {} location.reload(); };
+// theme toggle: dark <-> light (default dark); persisted, applied to <html data-theme>
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  const b = $("btn-theme"); if (b) b.textContent = t === "dark" ? "☀" : "☾";  // show what a click switches TO
+}
+let theme = (() => { try { return localStorage.getItem("stentor.theme") === "light" ? "light" : "dark"; } catch { return "dark"; } })();
+applyTheme(theme);
+$("btn-theme").onclick = () => {
+  theme = theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("stentor.theme", theme); } catch {}
+  applyTheme(theme);
+};
+function boot(){
+  poll("hs", "wpsd_status", {}, renderHotspot, "hs-body", "f-hs", 60000);
+  poll("bm", "bm_device_info", {}, renderBM, "bm-body", "f-bm", 120000);
+  try { lh.live = localStorage.getItem("stentor.lh.live") === "1"; lh.expanded = localStorage.getItem("stentor.lh.expanded") === "1"; } catch {}
+  $("lh-live").checked = lh.live;
+  lhStart();
+  $("rf-only").onchange = lhStart;
+  $("lh-live").onchange = (e) => { lh.live = e.target.checked; try { localStorage.setItem("stentor.lh.live", lh.live ? "1" : "0"); } catch {} lhStart(); };
+  $("lh-more").onclick = () => { lh.expanded = !lh.expanded; try { localStorage.setItem("stentor.lh.expanded", lh.expanded ? "1" : "0"); } catch {} lhStart(); };
+  radioDetect(); setInterval(() => { if (!document.hidden && !state.busy) radioDetect(); }, 30000);
+  refreshList();
+  $("cp-select").onchange = (e) => { state.codeplug = e.target.value; state.zone = null; renderList({ workspace: state.ws }); };
+  document.querySelectorAll('.tabs [role=tab]').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; state.filter = ""; renderCodeplug(); });
+  $("btn-read").onclick = radioRead;
+  $("btn-write").onclick = radioWrite;
+  $("btn-validate").onclick = validate;
+  $("btn-bridge").onclick = bridgeToggle;
+  $("btn-contacts").onclick = contactsWrite;
+  $("btn-export-cps").onclick = () => { location.href = `api/export/cps?codeplug=${encodeURIComponent(state.codeplug)}&shack=1`; };
+  $("btn-import-rdt").onclick = () => $("rdt-file").click();
+  $("rdt-file").onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return; e.target.value = "";
+    toast(t("Μετατρέπω το .rdt…"), 8000);
+    try {
+      const r = await fetch(`api/import/rdt?name=${encodeURIComponent(f.name)}&shack=1`, { method: "POST", headers: { "X-Shack": "1" }, body: f });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw { message: j.error || j.messages || "import failed" };
+      state.codeplug = j.target; await refreshList(); toast(t("Εισαγωγή OK: ") + j.target);
+    } catch (err) { toast(t("Η εισαγωγή απέτυχε: ") + errCopy(err), 8000); }
+  };
+  $("btn-revert").onclick = restorePicker;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+}
+boot();
+</script>
+</body></html>

@@ -1,0 +1,21 @@
+# Stage image "stentor-dmrconf": qdmr's dmrconf CLI built from source with the Stentor pty-bridge patch,
+# which lets `dmrconf --radio <key> --device /dev/pts/N` talk to a radio that is bridged from a browser
+# (Web Serial -> WebSocket -> pty). Output: /out/dmrconf + /out/libdmrconf.so* (picked up by the main Dockerfile).
+#   docker build -f Dockerfile.dmrconf -t stentor-dmrconf:0.15.1 .
+ARG QDMR_VERSION=0.15.1
+FROM debian:forky-slim AS build
+ARG QDMR_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build pkg-config librsvg2-bin curl ca-certificates patch \
+    qt6-base-dev qt6-base-dev-tools qt6-tools-dev qt6-tools-dev-tools qt6-l10n-tools \
+    qt6-serialport-dev qt6-positioning-dev qt6-multimedia-dev \
+    libusb-1.0-0-dev libyaml-cpp-dev \
+ && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /src && curl -fsSL "https://github.com/hmatuschek/qdmr/archive/refs/tags/v${QDMR_VERSION}.tar.gz" \
+    | tar xz -C /src --strip-components=1
+COPY patches/qdmr-${QDMR_VERSION}-pty-device.patch /tmp/pty.patch
+RUN cd /src && patch -p1 < /tmp/pty.patch
+RUN cmake -S /src -B /b -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_MAN=OFF -DINSTALL_UDEV_RULES=OFF -DINSTALL_APPSTREAM_DATA=OFF \
+ && cmake --build /b --target dmrconf -j"$(nproc)" \
+ && mkdir -p /out && cp /b/cli/dmrconf /out/ && cp -a /b/lib/libdmrconf.so* /out/ && ls -la /out

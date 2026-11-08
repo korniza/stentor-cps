@@ -1,0 +1,36 @@
+--- a/lib/d868uv_codeplug.cc
++++ b/lib/d868uv_codeplug.cc
+@@ -1464,6 +1464,9 @@
+   MessageBytemapElement sms_bytemap(data(Offset::messageBytemap()));
+   unsigned int num_messages = std::min(Limit::numMessages(), ctx.count<SMSTemplate>());
+   sms_bytemap.clear(); sms_bytemap.enableFirst(num_messages);
++  // Stentor p5: the bytes after the 100 message flags are 0x00 in AnyTone CPS images (qdmr left 0xff).
++  memset(data(Offset::messageBytemap()) + Limit::numMessages(), 0x00,
++         MessageBytemapElement::size() - Limit::numMessages());
+ }
+ 
+ 
+@@ -2258,13 +2261,22 @@
+   for (unsigned int i=0; i<num_sms_messages; i++) {
+     unsigned int bank = i/Limit::numMessagePerBank(), msg_idx = i % Limit::numMessagePerBank();
+     unsigned int addr = Offset::messageBanks() + bank*Offset::betweenMessageBanks() + msg_idx*MessageElement::size();
++    // Stentor p5: lay the bank out like the AnyTone CPS does: unused slots 0xff, a used slot is the text
++    // zero-padded to 0xd0 bytes followed by 0xff.
++    if (0 == msg_idx)
++      memset(data(Offset::messageBanks() + bank*Offset::betweenMessageBanks()), 0xff, Size::messageBank());
++    memset(data(addr), 0x00, 0xd0);
+     MessageElement message(data(addr));
+     message.setMessage(ctx.get<SMSTemplate>(i)->message());
++    // Message list entry: byte 2 = index of the next entry (0xff = end of list), byte 3 = this
++    // entry's message index. Upstream set the previous entry's *index* instead of its *next* and
++    // never terminated the list, so the radio showed an empty "Quick Text" list (Stentor p4).
+     MessageListElement listElement(data(Offset::messageIndex() + i*Size::messageIndex()));
++    listElement.clear();
+     listElement.setIndex(i);
+     if (i > 0) {
+       MessageListElement prevElement(data(Offset::messageIndex() + (i-1)*Size::messageIndex()));
+-      prevElement.setIndex(i);
++      prevElement.setNext(i);
+     }
+   }
+   return true;

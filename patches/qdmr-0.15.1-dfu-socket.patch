@@ -1,0 +1,259 @@
+--- a/cli/autodetect.cc
++++ b/cli/autodetect.cc
+@@ -40,6 +40,24 @@
+ 
+   logDebug() << "Autodetect radios.";
+ 
++  // stentor/Stentor: a TyT-family (DFU) radio bridged from a browser through WebUSB
++  if (parser.isSet("device") && parser.isSet("radio") && parser.value("device").startsWith("dfu:")) {
++    RadioInfo radio = RadioInfo::byKey(parser.value("radio").toLower());
++    if (! radio.isValid()) {
++      errMsg(err) << "Unknown radio '" << parser.value("radio").toLower() << "'.";
++      return nullptr;
++    }
++    struct BridgedDFU: public USBDeviceDescriptor {   // the (info, QString) constructor is protected
++      BridgedDFU(const QString &dev): USBDeviceDescriptor(USBDeviceInfo(USBDeviceInfo::Class::DFU, 0x0483, 0xdf11), dev) { }
++    };
++    BridgedDFU device(parser.value("device"));
++    logInfo() << "Using the DFU bridge " << parser.value("device") << " for radio " << radio.name() << ".";
++    Radio *rad = Radio::detect(device, radio, err);
++    if (nullptr == rad)
++      logError() << "Cannot detect radio on the DFU bridge.";
++    return rad;
++  }
++
+   QList<USBDeviceDescriptor> interfaces = USBDeviceDescriptor::detect();
+   if (interfaces.isEmpty())
+     interfaces = USBDeviceDescriptor::detect(false);
+--- a/lib/dfu_libusb.cc
++++ b/lib/dfu_libusb.cc
+@@ -1,5 +1,9 @@
+ #include "dfu_libusb.hh"
+ #include <unistd.h>
++#include <string.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <sys/time.h>
+ #include "logger.hh"
+ #include "utils.hh"
+ 
+@@ -47,7 +51,7 @@
+  * Implementation of DFUDevice
+  * ********************************************************************************************* */
+ DFUDevice::DFUDevice(const USBDeviceDescriptor &descr, const ErrorStack &err, QObject *parent)
+-  : QObject(parent), _ctx(nullptr), _dev(nullptr)
++  : QObject(parent), _ctx(nullptr), _dev(nullptr), _sock(-1)
+ {
+   if (USBDeviceInfo::Class::DFU != descr.interfaceClass()) {
+     errMsg(err) << "Cannot connect to DFU device using a non DFU descriptor: "
+@@ -55,6 +59,28 @@
+     return;
+   }
+ 
++  // stentor/Stentor: "dfu:<unix socket>" = a radio bridged from a browser (WebUSB). Every control transfer goes
++  // over the socket to the relay, which runs it on the radio through the user's browser.
++  if (descr.device().toString().startsWith("dfu:")) {
++    QByteArray path = descr.device().toString().mid(4).toLocal8Bit();
++    struct sockaddr_un sa; memset(&sa, 0, sizeof(sa)); sa.sun_family = AF_UNIX;
++    if ((size_t)path.size() >= sizeof(sa.sun_path)) {
++      errMsg(err) << "DFU bridge socket path too long."; return;
++    }
++    memcpy(sa.sun_path, path.constData(), path.size());
++    int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
++    if ((fd < 0) || (0 != ::connect(fd, (struct sockaddr *)&sa, sizeof(sa)))) {
++      errMsg(err) << "Cannot connect to the DFU bridge " << descr.device().toString() << ".";
++      if (fd >= 0) ::close(fd);
++      return;
++    }
++    struct timeval tv; tv.tv_sec = 30; tv.tv_usec = 0;    // the relay answers or times out well before this
++    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
++    _sock = fd;
++    logDebug() << "Connected to DFU bridge " << descr.device().toString() << ".";
++    return;
++  }
++
+   int error = libusb_init(&_ctx);
+   if (error < 0) {
+     errMsg(err) << "Libusb init failed (" << error << "): "
+@@ -176,11 +202,51 @@
+ 
+ bool
+ DFUDevice::isOpen() const {
+-  return nullptr != _dev;
++  return (nullptr != _dev) || (_sock >= 0);
++}
++
++static bool
++_io_all(int fd, unsigned char *buf, size_t n, bool wr) {
++  while (n > 0) {
++    ssize_t k = wr ? ::send(fd, buf, n, MSG_NOSIGNAL) : ::recv(fd, buf, n, 0);
++    if (k <= 0) return false;
++    buf += k; n -= (size_t)k;
++  }
++  return true;
++}
++
++int
++DFUDevice::ctrl(uint8_t reqType, uint8_t req, uint16_t value, uint16_t index, unsigned char *data, uint16_t len) {
++  if (_sock < 0)
++    return libusb_control_transfer(_dev, reqType, req, value, index, data, len, 0);
++  // request: 'C' type req value(le16) index(le16) length(le16) [data when host->device]
++  // answer:  status (le32: bytes transferred, or a negative libusb error) [data when device->host and status > 0]
++  unsigned char hdr[9] = { 'C', reqType, req, (unsigned char)(value & 0xff), (unsigned char)(value >> 8),
++                           (unsigned char)(index & 0xff), (unsigned char)(index >> 8),
++                           (unsigned char)(len & 0xff), (unsigned char)(len >> 8) };
++  bool in = (reqType & 0x80);
++  if (! _io_all(_sock, hdr, 9, true))
++    return LIBUSB_ERROR_NO_DEVICE;
++  if ((! in) && len && data && (! _io_all(_sock, data, len, true)))
++    return LIBUSB_ERROR_NO_DEVICE;
++  unsigned char st[4];
++  if (! _io_all(_sock, st, 4, false))
++    return LIBUSB_ERROR_TIMEOUT;
++  int32_t status = (int32_t)((uint32_t)st[0] | ((uint32_t)st[1] << 8) | ((uint32_t)st[2] << 16) | ((uint32_t)st[3] << 24));
++  if (in && (status > 0)) {
++    if (status > len) return LIBUSB_ERROR_OVERFLOW;
++    if (! _io_all(_sock, data, (size_t)status, false))
++      return LIBUSB_ERROR_TIMEOUT;
++  }
++  return status;
+ }
+ 
+ void
+ DFUDevice::close() {
++  if (_sock >= 0) {
++    ::close(_sock);
++    _sock = -1;
++  }
+   if (nullptr != _dev) {
+     libusb_release_interface(_dev, 0);
+     libusb_close(_dev);
+@@ -194,8 +260,8 @@
+ 
+ int
+ DFUDevice::download(unsigned block, uint8_t *data, unsigned len, const ErrorStack &err) {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_DEVICE, REQUEST_DNLOAD, block, 0, data, len, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_DEVICE, REQUEST_DNLOAD, block, 0, data, len);
+ 
+   if (error < 0) {
+     errMsg(err) << "Cannot write to device: " << libusb_strerror((enum libusb_error) error) << ".";
+@@ -207,8 +273,8 @@
+ 
+ int
+ DFUDevice::upload(unsigned block, uint8_t *data, unsigned len, const ErrorStack &err) {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_HOST, REQUEST_UPLOAD, block, 0, data, len, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_HOST, REQUEST_UPLOAD, block, 0, data, len);
+ 
+   if (error < 0) {
+     errMsg(err) << "Cannot read block: " << libusb_strerror((enum libusb_error) error) << ".";
+@@ -221,8 +287,8 @@
+ int
+ DFUDevice::detach(int timeout, const ErrorStack &err)
+ {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_DEVICE, REQUEST_DETACH, timeout, 0, nullptr, 0, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_DEVICE, REQUEST_DETACH, timeout, 0, nullptr, 0);
+   if (0 > error) {
+     errMsg(err) << "Cannot detach device: " << libusb_strerror((enum libusb_error) error) << ".";
+     return error;
+@@ -233,8 +299,8 @@
+ int
+ DFUDevice::get_status(const ErrorStack &err)
+ {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_HOST, REQUEST_GETSTATUS, 0, 0, (unsigned char*)&_status, 6, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_HOST, REQUEST_GETSTATUS, 0, 0, (unsigned char*)&_status, 6);
+   if (0 > error) {
+     errMsg(err) << "Cannot get status: " << libusb_strerror((enum libusb_error) error) << ".";
+     return error;
+@@ -245,8 +311,8 @@
+ int
+ DFUDevice::clear_status(const ErrorStack &err)
+ {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_DEVICE, REQUEST_CLRSTATUS, 0, 0, NULL, 0, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_DEVICE, REQUEST_CLRSTATUS, 0, 0, NULL, 0);
+   if (0 > error) {
+     errMsg(err) << "Cannot clear status: " << libusb_strerror((enum libusb_error) error) << ".";
+     return error;
+@@ -259,8 +325,8 @@
+ {
+   unsigned char state;
+ 
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_HOST, REQUEST_GETSTATE, 0, 0, &state, 1, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_HOST, REQUEST_GETSTATE, 0, 0, &state, 1);
+   pstate = state;
+   if (error < 0) {
+     errMsg(err) << "Cannot get state: " << libusb_strerror((enum libusb_error) error) << ".";
+@@ -272,8 +338,8 @@
+ int
+ DFUDevice::abort(const ErrorStack &err)
+ {
+-  int error = libusb_control_transfer(
+-        _dev, REQUEST_TYPE_TO_DEVICE, REQUEST_ABORT, 0, 0, NULL, 0, 0);
++  int error = ctrl(
++        REQUEST_TYPE_TO_DEVICE, REQUEST_ABORT, 0, 0, NULL, 0);
+   if (error < 0) {
+     errMsg(err) << "Cannot abort: " << libusb_strerror((enum libusb_error) error) << ".";
+     return error;
+--- a/lib/dfu_libusb.hh
++++ b/lib/dfu_libusb.hh
+@@ -68,6 +68,8 @@
+   int abort(const ErrorStack &err=ErrorStack());
+   /** Internal used function to busy-wait for a response from the device. */
+   int wait_idle(const ErrorStack &err=ErrorStack());
++  /** Stentor: one USB control transfer, over libusb or over the bridge socket. */
++  int ctrl(uint8_t reqType, uint8_t req, uint16_t value, uint16_t index, unsigned char *data, uint16_t len);
+ 
+ protected:
+   /** USB context. */
+@@ -76,6 +78,8 @@
+ 	libusb_device_handle *_dev;
+   /** Device status. */
+ 	status_t _status;
++  /** Stentor DFU bridge: unix socket to the relay (control transfers are run in the browser), or -1. */
++  int _sock;
+ };
+ 
+ 
+--- a/lib/tyt_interface.cc
++++ b/lib/tyt_interface.cc
+@@ -241,7 +241,7 @@
+ 
+ bool
+ TyTInterface::reboot(const ErrorStack &err) {
+-  if (! _ctx)
++  if (! DFUDevice::isOpen())   // stentor: also true on the DFU bridge socket (no libusb context)
+     return false;
+ 
+   if (wait_idle())
+--- a/lib/usbdevice.cc
++++ b/lib/usbdevice.cc
+@@ -207,6 +207,9 @@
+ 
+ bool
+ USBDeviceDescriptor::validRawUSB() const {
++  // stentor: a DFU radio bridged from a browser (unix socket) is always considered present
++  if (_device.toString().startsWith("dfu:"))
++    return true;
+   int error, num;
+   libusb_context *ctx;
+   if (0 > (error = libusb_init(&ctx))) {
+@@ -273,6 +276,8 @@
+ USBDeviceDescriptor::description() const {
+   if (USBDeviceInfo::Class::Serial == _class) {
+     return QString("Serial interface '%1'").arg(_device.toString());
++  } else if ((USBDeviceInfo::Class::DFU == _class) && _device.toString().startsWith("dfu:")) {
++    return QString("USB device in DFU mode via browser bridge");
+   } else if (USBDeviceInfo::Class::DFU == _class) {
+     USBDeviceHandle addr = _device.value<USBDeviceHandle>();
+     return QString("USB device in DFU mode: bus %1, device %2").arg(addr.bus).arg(addr.device);
